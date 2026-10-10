@@ -1,0 +1,2663 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantVal | Plataforma de Valuación Cuantitativa Institucional</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: '#06B6D4', 600: '#0891B2' },
+            dark: { 900: '#0B0F19', 800: '#111827', 700: '#1F2937', 600: '#374151' }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .glass { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(31, 41, 55, 0.8); }
+    .gradient-text { background: linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 16px;
+      width: 16px;
+      border-radius: 50%;
+      background: #06B6D4;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
+    }
+    @media print {
+      body { background: #FFFFFF !important; color: #111827 !important; }
+      header, #searchForm, #btnCopyReport, #btnPrintReport, #toast, .quick-chips, #loadingState, #calcSensitivityReset { display: none !important; }
+      .glass { background: #FFFFFF !important; border: 1px solid #E5E7EB !important; box-shadow: none !important; }
+      .text-white { color: #111827 !important; }
+      .text-gray-400, .text-gray-300, .text-gray-500 { color: #4B5563 !important; }
+      .bg-dark-900, .bg-dark-800, .bg-dark-700 { background: #F9FAFB !important; border-color: #E5E7EB !important; }
+      canvas { max-height: 200px !important; }
+    }
+  </style>
+</head>
+<body class="bg-dark-900 text-gray-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-dark-700 bg-dark-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+        </div>
+        <div>
+          <span class="font-extrabold text-lg tracking-tight">Quant<span class="text-cyan-400">Val</span></span>
+          <span class="ml-2 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/50">Pro Engine</span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 text-xs text-gray-400">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Motor Cuantitativo Conectado</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero & Search -->
+  <section class="max-w-7xl mx-auto px-4 pt-10 pb-6 w-full">
+    <div class="text-center max-w-2xl mx-auto mb-8">
+      <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight mb-3">
+        Valuación Fundamental con <span class="gradient-text">Rigor Matemático</span>
+      </h1>
+      <p class="text-sm md:text-base text-gray-400">
+        Monte Carlo (10.000 iteraciones), Reverse DCF, Papers Académicos (Piotroski, Mayer, Graham) y Clasificación Automática de Negocio.
+      </p>
+    </div>
+
+    <!-- Mode Switcher Tabs -->
+    <div class="flex items-center justify-center gap-2 mb-6">
+      <button id="tabSingle" type="button" onclick="switchViewMode('single')" class="px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span>Valuación Individual</span>
+      </button>
+      <button id="tabDuel" type="button" onclick="switchViewMode('duel')" class="px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-amber-500/50 flex items-center gap-2">
+        <span>⚔️ Cara a Cara (Head-to-Head)</span>
+        <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">Duelo</span>
+      </button>
+    </div>
+
+    <!-- Single Search Form -->
+    <div id="singleSearchWrapper" class="max-w-xl mx-auto mb-4">
+      <form id="searchForm" class="flex gap-2">
+        <div class="relative flex-1">
+          <input type="text" id="tickerInput" placeholder="Ingresá un ticker o duelo (ej. NFLX o NVDA vs AMD)..." 
+                 class="w-full bg-dark-800 border border-dark-700 rounded-xl px-4 py-3.5 pl-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-medium text-sm shadow-xl"
+                 value="NFLX" required autocomplete="off">
+          <svg class="w-5 h-5 text-gray-500 absolute left-3.5 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <button type="submit" id="btnSubmit" class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold px-6 py-3.5 rounded-xl transition-all shadow-lg shadow-cyan-500/20 text-sm flex items-center gap-2">
+          <span>Valuar</span>
+        </button>
+      </form>
+
+      <!-- Quick Ticker Chips -->
+      <div class="quick-chips flex items-center justify-center gap-1.5 mt-3 flex-wrap">
+        <span class="text-xs text-gray-500 font-medium">Sectores:</span>
+        <button type="button" onclick="quickSearch('NVDA')" class="text-xs bg-dark-800 hover:bg-dark-700 text-cyan-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">NVDA (IA Fabless)</button>
+        <button type="button" onclick="quickSearch('AAPL')" class="text-xs bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors">AAPL (Tech)</button>
+        <button type="button" onclick="quickSearch('MSFT')" class="text-xs bg-dark-800 hover:bg-dark-700 text-blue-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">MSFT (Cloud/SaaS)</button>
+        <button type="button" onclick="quickSearch('NFLX')" class="text-xs bg-dark-800 hover:bg-dark-700 text-rose-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">NFLX (Streaming)</button>
+        <button type="button" onclick="quickSearch('MELI')" class="text-xs bg-dark-800 hover:bg-dark-700 text-yellow-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">MELI (E-Commerce)</button>
+        <button type="button" onclick="quickSearch('JPM')" class="text-xs bg-dark-800 hover:bg-dark-700 text-emerald-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">JPM (Banca Tier-1)</button>
+        <button type="button" onclick="quickSearch('MS')" class="text-xs bg-dark-800 hover:bg-dark-700 text-indigo-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">MS (Banca Inversión)</button>
+        <button type="button" onclick="quickSearch('BAC')" class="text-xs bg-dark-800 hover:bg-dark-700 text-teal-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">BAC (Banca Comercial)</button>
+        <button type="button" onclick="quickSearch('CAT')" class="text-xs bg-dark-800 hover:bg-dark-700 text-amber-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">CAT (Industrial)</button>
+        <button type="button" onclick="quickSearch('KO')" class="text-xs bg-dark-800 hover:bg-dark-700 text-red-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">KO (Consumo)</button>
+      </div>
+    </div>
+
+    <!-- Duel Search Form (Cara a Cara) -->
+    <div id="duelSearchWrapper" class="hidden max-w-2xl mx-auto mb-4">
+      <form id="duelSearchForm" class="flex flex-col sm:flex-row items-center gap-2">
+        <div class="relative flex-1 w-full">
+          <input type="text" id="tickerInputA" placeholder="Ticker A (ej. NVDA)..." 
+                 class="w-full bg-dark-800 border border-cyan-500/50 rounded-xl px-4 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all font-bold text-sm shadow-xl uppercase text-center sm:text-left"
+                 value="NVDA" required autocomplete="off">
+        </div>
+        <div class="font-extrabold text-amber-400 text-xs px-2 uppercase tracking-widest flex items-center gap-1">
+          <span>⚡ VS ⚡</span>
+        </div>
+        <div class="relative flex-1 w-full">
+          <input type="text" id="tickerInputB" placeholder="Ticker B (ej. AMD)..." 
+                 class="w-full bg-dark-800 border border-purple-500/50 rounded-xl px-4 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400 transition-all font-bold text-sm shadow-xl uppercase text-center sm:text-left"
+                 value="AMD" required autocomplete="off">
+        </div>
+        <button type="submit" id="btnSubmitDuel" class="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-lg shadow-amber-500/20 text-sm flex items-center justify-center gap-2 whitespace-nowrap">
+          <span>⚔️ Iniciar Duelo</span>
+        </button>
+      </form>
+
+      <!-- Quick Duel Chips -->
+      <div class="quick-chips flex items-center justify-center gap-1.5 mt-3 flex-wrap">
+        <span class="text-xs text-gray-500 font-medium">Duelos Populares:</span>
+        <button type="button" onclick="quickDuel('NVDA', 'AMD')" class="text-xs bg-dark-800 hover:bg-dark-700 text-cyan-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">NVDA vs AMD (Semis/IA)</button>
+        <button type="button" onclick="quickDuel('MELI', 'AMZN')" class="text-xs bg-dark-800 hover:bg-dark-700 text-yellow-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">MELI vs AMZN (E-Commerce)</button>
+        <button type="button" onclick="quickDuel('JPM', 'BAC')" class="text-xs bg-dark-800 hover:bg-dark-700 text-emerald-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">JPM vs BAC (Bancos Tier-1)</button>
+        <button type="button" onclick="quickDuel('MSFT', 'GOOGL')" class="text-xs bg-dark-800 hover:bg-dark-700 text-blue-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">MSFT vs GOOGL (Big Tech)</button>
+        <button type="button" onclick="quickDuel('KO', 'PEP')" class="text-xs bg-dark-800 hover:bg-dark-700 text-rose-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">KO vs PEP (Bebidas)</button>
+        <button type="button" onclick="quickDuel('CAT', 'DE')" class="text-xs bg-dark-800 hover:bg-dark-700 text-amber-400 border border-dark-700 px-2.5 py-1 rounded-lg transition-colors font-medium">CAT vs DE (Maquinaria)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Loading State -->
+  <div id="loadingState" class="hidden max-w-7xl mx-auto px-4 py-20 text-center">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500 mb-4"></div>
+    <h3 class="text-lg font-bold text-gray-200" id="loadingTitle">Descargando estados contables...</h3>
+    <p class="text-sm text-gray-500">Ejecutando 10.000 iteraciones de Monte Carlo y Reverse DCF en memoria...</p>
+  </div>
+
+  <!-- Dashboard Container -->
+  <main id="dashboard" class="max-w-7xl mx-auto px-4 pb-20 w-full flex-1">
+    
+    <!-- Top Summary Card -->
+    <div class="glass rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-dark-700/60 pb-5">
+        <div>
+          <div class="flex items-center gap-3 mb-1">
+            <h2 id="compName" class="text-2xl font-extrabold tracking-tight text-white">-</h2>
+            <span id="tickerBadge" class="bg-cyan-950 text-cyan-400 border border-cyan-800/60 text-xs font-bold px-2.5 py-0.5 rounded-md">-</span>
+            <span id="archetypeBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-dark-700 text-gray-300 border border-dark-600">-</span>
+          </div>
+          <p id="compSector" class="text-xs text-gray-400">-</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Big Decision Pill -->
+          <div id="verdictBox" class="p-3.5 px-6 rounded-xl flex items-center gap-4 bg-emerald-950/40 border border-emerald-800/40">
+            <div>
+              <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Veredicto Cuantitativo</div>
+              <div id="verdictText" class="text-base font-extrabold text-emerald-400">-</div>
+            </div>
+            <div class="h-8 w-px bg-dark-700"></div>
+            <div>
+              <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Margen de Seguridad</div>
+              <div id="mosValue" class="text-base font-extrabold text-white">-</div>
+            </div>
+          </div>
+          <!-- Copy Executive Summary Button -->
+          <button onclick="copyExecutiveSummary()" id="btnCopyReport" title="Copiar Resumen Ejecutivo" class="h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-cyan-300">Copiar</span>
+          </button>
+          <!-- Print / PDF Button -->
+          <button onclick="window.print()" id="btnPrintReport" title="Imprimir o Guardar como PDF" class="h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-blue-300">PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Key Metrics Row -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5">
+        <div class="bg-dark-800/60 rounded-xl p-3.5 border border-dark-700/60">
+          <div class="text-xs text-gray-400 mb-0.5">Precio de Mercado</div>
+          <div id="currPrice" class="text-xl font-bold text-white">-</div>
+        </div>
+        <div class="bg-dark-800/60 rounded-xl p-3.5 border border-dark-700/60">
+          <div class="text-xs text-gray-400 mb-0.5">Valor Compuesto Estimado</div>
+          <div id="fairValue" class="text-xl font-bold text-cyan-400">-</div>
+        </div>
+        <div class="bg-dark-800/60 rounded-xl p-3.5 border border-dark-700/60">
+          <div class="text-xs text-gray-400 mb-0.5">Monte Carlo Mediana (P50)</div>
+          <div id="mcMedian" class="text-xl font-bold text-gray-200">-</div>
+        </div>
+        <div class="bg-dark-800/60 rounded-xl p-3.5 border border-dark-700/60">
+          <div class="text-xs text-gray-400 mb-0.5">Precio Objetivo Analistas</div>
+          <div id="wsTarget" class="text-xl font-bold text-gray-200">-</div>
+        </div>
+      </div>
+
+      <!-- Interactive Valuation Spectrum Gauge (Termómetro de Valuación) -->
+      <div class="mt-6 pt-5 border-t border-dark-700/60">
+        <div class="flex items-center justify-between text-xs mb-2">
+          <span class="font-bold text-gray-300 flex items-center gap-1.5">
+            <span>Termómetro de Valuación</span>
+            <span class="text-[10px] font-normal text-gray-400">(Ubicación de cotización dentro del espectro estocástico)</span>
+          </span>
+          <span id="spectrumStatus" class="font-bold text-xs text-cyan-400">-</span>
+        </div>
+        <!-- Multi-Zone Spectrum Bar -->
+        <div class="relative w-full h-4 rounded-full overflow-hidden bg-dark-800 flex shadow-inner">
+          <div class="h-full bg-emerald-500/75 w-1/4" title="Zona Descuento Profundo (< P10)"></div>
+          <div class="h-full bg-teal-500/75 w-1/4" title="Zona Compra / Defensiva (P10 - P50)"></div>
+          <div class="h-full bg-amber-500/75 w-1/4" title="Zona Fair Value (P50 - P75)"></div>
+          <div class="h-full bg-rose-500/75 w-1/4" title="Zona Sobrevaluada / Exigente (> P75)"></div>
+          <!-- Current Price Needle Indicator -->
+          <div id="spectrumNeedle" class="absolute top-0 bottom-0 w-3 bg-white border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,1)] rounded-full transition-all duration-700 transform -translate-x-1/2" style="left: 50%;"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-gray-400 mt-2 px-1">
+          <span class="text-emerald-400 font-semibold">◄ Descuento Profundo (&lt; P10)</span>
+          <span class="text-teal-400 font-semibold">Defensivo (P10 - P50)</span>
+          <span class="text-amber-400 font-semibold">Fair Value (P50 - P75)</span>
+          <span class="text-rose-400 font-semibold">Sobrevaluada / Bull (&gt; P75) ►</span>
+        </div>
+      </div>
+
+      <!-- Matriz de Sensibilidad de Precios según Margen de Seguridad -->
+      <div class="mt-6 pt-5 border-t border-dark-700/60">
+        <div class="flex items-center justify-between text-xs mb-3">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-gray-200">Sensibilidad de Cotización vs Margen de Seguridad</span>
+            <span class="text-[10px] text-gray-400 hidden sm:inline">&bull; Umbrales matemáticos de precio según nivel de descuento patrimonial</span>
+          </div>
+          <span id="dcaStatusBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-dark-700 text-gray-300">-</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="bg-dark-800/80 p-3 rounded-xl border border-cyan-500/40">
+            <div class="text-[10px] text-cyan-400 font-bold uppercase tracking-wider mb-0.5">MoS 30% (Filtro Graham)</div>
+            <div id="targetDefensive" class="text-base font-extrabold text-white">-</div>
+            <div class="text-[9px] text-gray-400 mt-0.5">Descuento estricto</div>
+          </div>
+          <div class="bg-dark-800/80 p-3 rounded-xl border border-teal-500/40">
+            <div class="text-[10px] text-teal-400 font-bold uppercase tracking-wider mb-0.5">MoS 20% (Piso Defensivo)</div>
+            <div id="targetModerate" class="text-base font-extrabold text-teal-300">-</div>
+            <div class="text-[9px] text-gray-400 mt-0.5">Margen institucional</div>
+          </div>
+          <div class="bg-dark-800/80 p-3 rounded-xl border border-emerald-500/40">
+            <div class="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-0.5">MoS 10% (Descuento Moderado)</div>
+            <div id="targetAggressive" class="text-base font-extrabold text-emerald-300">-</div>
+            <div class="text-[9px] text-gray-400 mt-0.5">Margen mínimo prudencial</div>
+          </div>
+          <div class="bg-dark-800/80 p-3 rounded-xl border border-indigo-500/40">
+            <div class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Piso Estocástico (P10)</div>
+            <div id="targetP10" class="text-base font-extrabold text-indigo-300">-</div>
+            <div class="text-[9px] text-gray-400 mt-0.5">Soporte Monte Carlo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit & Normalization Alert (Dynamic) -->
+    <div id="auditAlertBox" class="hidden glass rounded-xl p-4 mb-6 border border-amber-500/40 bg-amber-950/20 flex items-start gap-3">
+      <div class="text-amber-400 mt-0.5 text-lg">⚠️</div>
+      <div class="text-xs">
+        <span class="font-bold text-amber-300 block mb-0.5">Ajuste Cuantitativo / Normalización de Estados Contables</span>
+        <span class="text-gray-300" id="auditAlertBody">-</span>
+      </div>
+    </div>
+
+    <!-- Charts & Models Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+      
+      <!-- Monte Carlo Chart (5 cols) -->
+      <div class="lg:col-span-5 glass rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <span>Monte Carlo (10.000 Sims)</span>
+                <span class="text-[10px] bg-dark-700 text-gray-400 px-2 py-0.5 rounded font-normal">Estocástico</span>
+              </h3>
+              <p class="text-[11px] text-gray-400">Distribución de probabilidad del valor intrínseco.</p>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-gray-400 block uppercase">P(Subvaluada)</span>
+              <span id="probUndervalued" class="text-sm font-extrabold text-cyan-400">-</span>
+            </div>
+          </div>
+          
+          <div class="h-[220px] relative">
+            <canvas id="monteCarloChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Percentiles bar -->
+        <div class="grid grid-cols-5 gap-1.5 mt-4 pt-3 border-t border-dark-700/60 text-center text-xs">
+          <div class="bg-dark-800/50 p-1.5 rounded-lg">
+            <span class="text-gray-500 block text-[9px] font-semibold uppercase">P10</span>
+            <span id="p10Val" class="font-bold text-rose-400 text-xs">-</span>
+          </div>
+          <div class="bg-dark-800/50 p-1.5 rounded-lg">
+            <span class="text-gray-500 block text-[9px] font-semibold uppercase">P25</span>
+            <span id="p25Val" class="font-bold text-yellow-400 text-xs">-</span>
+          </div>
+          <div class="bg-dark-800/50 p-1.5 rounded-lg border border-cyan-500/30">
+            <span class="text-cyan-400 block text-[9px] font-semibold uppercase">P50</span>
+            <span id="p50Val" class="font-bold text-white text-xs">-</span>
+          </div>
+          <div class="bg-dark-800/50 p-1.5 rounded-lg">
+            <span class="text-gray-500 block text-[9px] font-semibold uppercase">P75</span>
+            <span id="p75Val" class="font-bold text-emerald-400 text-xs">-</span>
+          </div>
+          <div class="bg-dark-800/50 p-1.5 rounded-lg">
+            <span class="text-gray-500 block text-[9px] font-semibold uppercase">P90</span>
+            <span id="p90Val" class="font-bold text-emerald-500 text-xs">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Snowflake Radar Chart (4 cols) -->
+      <div class="lg:col-span-4 glass rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span>Radar Cuantitativo (5 Ejes)</span>
+              <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Matriz de Solidez</span>
+            </h3>
+          </div>
+          <p class="text-[11px] text-gray-400 mb-2">Evaluación multidimensional de Valor, Futuro, Pasado, Salud y Rendimiento.</p>
+          
+          <div class="h-[220px] relative flex items-center justify-center">
+            <canvas id="snowflakeRadarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 5-Pillar Score Pills -->
+        <div class="grid grid-cols-5 gap-1 mt-4 pt-3 border-t border-dark-700/60 text-center">
+          <div class="bg-dark-800/60 p-1 rounded">
+            <span class="text-[8px] uppercase text-gray-400 block font-bold">Valor</span>
+            <span id="snowVal" class="text-xs font-black text-cyan-400">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1 rounded">
+            <span class="text-[8px] uppercase text-gray-400 block font-bold">Futuro</span>
+            <span id="snowFut" class="text-xs font-black text-blue-400">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1 rounded">
+            <span class="text-[8px] uppercase text-gray-400 block font-bold">Pasado</span>
+            <span id="snowPast" class="text-xs font-black text-indigo-400">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1 rounded">
+            <span class="text-[8px] uppercase text-gray-400 block font-bold">Salud</span>
+            <span id="snowHealth" class="text-xs font-black text-emerald-400">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1 rounded">
+            <span class="text-[8px] uppercase text-gray-400 block font-bold">Dividendos</span>
+            <span id="snowDiv" class="text-xs font-black text-amber-400">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reverse DCF & Shareholder Yield (3 cols) -->
+      <div class="lg:col-span-3 glass rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+        <div>
+          <h3 class="text-base font-bold text-white mb-0.5">Reverse Model & Yield</h3>
+          <p class="text-[11px] text-gray-400 mb-3">Expectativas implícitas y retorno total al accionista.</p>
+
+          <div class="space-y-3">
+            <!-- Implied Growth / ROE -->
+            <div class="bg-dark-800/70 p-3 rounded-xl border border-dark-700/60">
+              <div class="flex justify-between items-center mb-0.5">
+                <span class="text-[11px] text-gray-400" id="reverseMetricLabel">Crecimiento FCF Implícito</span>
+                <span id="consensusGrowth" class="text-[10px] text-cyan-400 font-bold">-</span>
+              </div>
+              <div id="impliedGrowth" class="text-xl font-extrabold text-amber-400">-</div>
+              <p id="sentimentDiag" class="text-[10px] text-gray-400 mt-1 font-medium leading-tight">-</p>
+            </div>
+
+            <!-- Shareholder Yield & Buyback Power -->
+            <div class="bg-dark-800/70 p-3 rounded-xl border border-dark-700/60">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-[11px] text-gray-400">Total Shareholder Yield</span>
+                <span id="totalShareholderYield" class="text-sm font-extrabold text-emerald-400">-</span>
+              </div>
+              <div class="grid grid-cols-2 gap-1 text-[10px] text-gray-300 pt-1 border-t border-dark-700/50">
+                <div>Dividendo: <span id="divYieldVal" class="font-bold text-white">-</span></div>
+                <div>Recompra (3y): <span id="buybackYieldVal" class="font-bold text-white">-</span></div>
+              </div>
+              <div class="mt-1.5 pt-1.5 border-t border-dark-700/50 text-[10px] text-gray-400 flex items-center justify-between">
+                <span>Payout: <strong id="payoutVal" class="text-gray-200">-</strong></span>
+                <span id="buybackStatusBadge" class="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800/50">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-3 border-t border-dark-700/60 text-[11px] flex justify-between text-gray-400">
+          <span>Respaldado por Fondos:</span>
+          <span id="instOwn" class="font-bold text-white">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Matriz de Escenarios Probabilísticos (DCF 10 Años) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Matriz de Escenarios Probabilísticos (DCF 10 Años)</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Modelado Estocástico Multivariante</span>
+          </h3>
+          <p class="text-xs text-gray-400">Ponderación matemática de tres estados macroeconómicos y operativos del negocio.</p>
+        </div>
+        <div class="text-left md:text-right">
+          <span class="text-[10px] text-gray-400 block uppercase font-semibold">Valor Intrínseco Ponderado E[V]</span>
+          <span id="scenarioEV" class="text-xl font-black text-cyan-400">-</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Bear 25% -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-rose-500/30 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-rose-400">Escenario Pesimista (Bear)</span>
+              <span class="text-[10px] bg-rose-950 text-rose-300 border border-rose-800/50 px-2 py-0.5 rounded font-semibold">25% Prob</span>
+            </div>
+            <div id="scenBearVal" class="text-2xl font-black text-white mb-1">-</div>
+            <div class="text-[11px] text-gray-300 space-y-0.5 mb-3">
+              <div>Crecimiento / Retorno: <strong id="scenBearGrowth" class="text-rose-300">-</strong></div>
+              <div>Tasa Descuento / Ke: <strong id="scenBearWacc" class="text-gray-300">-</strong></div>
+            </div>
+          </div>
+          <p id="scenBearHypo" class="text-[10px] text-gray-400 italic border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Base 50% -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-cyan-500/40 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-cyan-400">Escenario Base (Consenso)</span>
+              <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800/50 px-2 py-0.5 rounded font-semibold">50% Prob</span>
+            </div>
+            <div id="scenBaseVal" class="text-2xl font-black text-white mb-1">-</div>
+            <div class="text-[11px] text-gray-300 space-y-0.5 mb-3">
+              <div>Crecimiento / Retorno: <strong id="scenBaseGrowth" class="text-cyan-300">-</strong></div>
+              <div>Tasa Descuento / Ke: <strong id="scenBaseWacc" class="text-gray-300">-</strong></div>
+            </div>
+          </div>
+          <p id="scenBaseHypo" class="text-[10px] text-gray-400 italic border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Bull 25% -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-emerald-400">Escenario Optimista (Bull)</span>
+              <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/50 px-2 py-0.5 rounded font-semibold">25% Prob</span>
+            </div>
+            <div id="scenBullVal" class="text-2xl font-black text-white mb-1">-</div>
+            <div class="text-[11px] text-gray-300 space-y-0.5 mb-3">
+              <div>Crecimiento / Retorno: <strong id="scenBullGrowth" class="text-emerald-300">-</strong></div>
+              <div>Tasa Descuento / Ke: <strong id="scenBullWacc" class="text-gray-300">-</strong></div>
+            </div>
+          </div>
+          <p id="scenBullHypo" class="text-[10px] text-gray-400 italic border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculadora de Retorno Compuesto a 5 Años (TIR / Expected CAGR) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>TIR Estimada a 5 Años (Retorno Anual Compuesto Proyectado)</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">IRR & Shareholder Yield</span>
+          </h3>
+          <p class="text-xs text-gray-400">Rendimiento anualizado esperado desde el precio actual de mercado ($P) si converge a Fair Value en 5 años, sumado al Shareholder Yield (dividendos + recompras).</p>
+        </div>
+        <div id="cagrVerdictBadge" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-dark-800 text-gray-300 border border-dark-700 self-start md:self-auto">-</div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Weighted Expected TIR -->
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-cyan-500/50 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">TIR Ponderada E[TIR]</span>
+              <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800/60 px-1.5 py-0.5 rounded font-semibold">Ponderada</span>
+            </div>
+            <div id="tirExpected" class="text-3xl font-black text-cyan-400 mb-2">-</div>
+          </div>
+          <div class="border-t border-dark-700/60 pt-2 text-[10px] space-y-1">
+            <div class="flex justify-between text-gray-400">
+              <span>vs S&P 500 (10.0%):</span>
+              <strong id="tirSpSpread" class="text-gray-200">-</strong>
+            </div>
+            <div class="flex justify-between text-gray-400">
+              <span>vs Bono Tesoro (4.1%):</span>
+              <strong id="tirTreasurySpread" class="text-gray-200">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Base Scenario TIR -->
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-teal-500/40 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-teal-400 uppercase tracking-wider">TIR Escenario Base</span>
+              <span class="text-[10px] bg-teal-950 text-teal-300 border border-teal-800/60 px-1.5 py-0.5 rounded font-semibold">50% Prob</span>
+            </div>
+            <div id="tirBase" class="text-3xl font-black text-teal-300 mb-2">-</div>
+          </div>
+          <p class="text-[10px] text-gray-400 border-t border-dark-700/60 pt-2">Convergencia a Fair Value de consenso + retorno total al accionista.</p>
+        </div>
+
+        <!-- Bull Scenario TIR -->
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-emerald-500/40 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">TIR Escenario Bull</span>
+              <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.5 rounded font-semibold">25% Prob</span>
+            </div>
+            <div id="tirBull" class="text-3xl font-black text-emerald-400 mb-2">-</div>
+          </div>
+          <p class="text-[10px] text-gray-400 border-t border-dark-700/60 pt-2">Aceleración secular, expansión de márgenes y apalancamiento operativo.</p>
+        </div>
+
+        <!-- Bear Scenario TIR -->
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-rose-500/40 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-rose-400 uppercase tracking-wider">TIR Escenario Bear</span>
+              <span class="text-[10px] bg-rose-950 text-rose-300 border border-rose-800/60 px-1.5 py-0.5 rounded font-semibold">25% Prob</span>
+            </div>
+            <div id="tirBear" class="text-3xl font-black text-rose-400 mb-2">-</div>
+          </div>
+          <p class="text-[10px] text-gray-400 border-t border-dark-700/60 pt-2">Desaceleración severa, compresión de múltiplos y tasa WACC alta.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quality Scorecard Grid (Piotroski, Mayer, Altman, Rule 40) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      
+      <!-- Piotroski -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-emerald-500">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-400">Piotroski F-Score</span>
+          <span id="piotScore" class="text-lg font-black text-emerald-400">-</span>
+        </div>
+        <div class="w-full bg-dark-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="piotBar" class="bg-emerald-500 h-full rounded-full" style="width: 0%"></div>
+        </div>
+        <p class="text-[11px] text-gray-400">9 señales contables auditadas para descartar deterioro financiero.</p>
+      </div>
+
+      <!-- Mayer 100-Baggers -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-cyan-500">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-400">ROIC (Christopher Mayer)</span>
+          <span id="mayerRoic" class="text-lg font-black text-cyan-400">-</span>
+        </div>
+        <div class="text-[11px] text-gray-400 mb-1">Umbral Mayer: &gt; 15%</div>
+        <div id="roicSpread" class="text-xs font-bold text-emerald-400">-</div>
+      </div>
+
+      <!-- Altman Solvency -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-blue-500">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-400" id="altmanTitle">Altman Solvencia</span>
+          <span id="altmanScore" class="text-lg font-black text-blue-400">-</span>
+        </div>
+        <div id="altmanZone" class="text-xs font-bold text-emerald-400 mb-1">-</div>
+        <p class="text-[11px] text-gray-400">Riesgo de insolvencia o estrés crediticio.</p>
+      </div>
+
+      <!-- Tech / Asset Light or Capital Intensity -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-purple-500">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-400" id="techKpiTitle">Regla del 40</span>
+          <span id="techKpiValue" class="text-lg font-black text-purple-400">-</span>
+        </div>
+        <div id="techKpiSubtitle" class="text-xs font-bold text-gray-300 mb-1">-</div>
+        <p id="techKpiDesc" class="text-[11px] text-gray-400">Crecimiento + Margen FCF.</p>
+      </div>
+    </div>
+
+    <!-- Checklist Fundamental de Calidad (8 Criterios de Due Diligence) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Checklist Fundamental de Calidad (8 Criterios de Due Diligence)</span>
+            <span id="checklistScoreBadge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800/60">-</span>
+          </h3>
+          <p class="text-xs text-gray-400">Verificación estricta de solvencia, rentabilidad económica, generación de caja y gobernanza.</p>
+        </div>
+        <div id="checklistVerdict" class="text-xs font-bold text-emerald-400">-</div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs" id="checklistGrid">
+        <!-- Dynamic checklist pills injected here -->
+      </div>
+    </div>
+
+    <!-- Auditoría Forense Contable & Radiografía Institucional (Academic Literature) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Auditoría Forense Contable & Calidad Institucional</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Papers: Sloan, Damodaran, Greenwald & Novy-Marx</span>
+          </h3>
+          <p class="text-xs text-gray-400">Análisis forense cuantitativo de calidad de ganancias, dilución por remuneraciones en acciones y separación de Capex.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Sloan Accruals (1996) -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-dark-700/70 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-cyan-400">Sloan Accruals (1996)</span>
+              <span id="sloanBadge" class="text-[9px] px-2 py-0.5 rounded font-bold bg-dark-700 text-gray-300">-</span>
+            </div>
+            <div class="text-xl font-black text-white mb-1" id="sloanRatioVal">-</div>
+            <div class="text-[10px] text-gray-400 mb-2 font-mono">(Net Income - CFO) / Activos</div>
+          </div>
+          <p id="sloanDesc" class="text-[10px] text-gray-300 border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Damodaran SBC & Real Economic FCF -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-dark-700/70 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-purple-400">FCF Real post-SBC (Damodaran)</span>
+              <span id="sbcIntensityBadge" class="text-[9px] px-2 py-0.5 rounded font-bold bg-purple-950 text-purple-300 border border-purple-800/60">-</span>
+            </div>
+            <div class="text-xl font-black text-white mb-1" id="realFcfVal">-</div>
+            <div class="text-[10px] text-gray-400 mb-2 flex justify-between">
+              <span>Reportado: <strong id="reportedFcfVal" class="text-gray-300">-</strong></span>
+              <span>SBC: <strong id="sbcAmountVal" class="text-purple-300">-</strong></span>
+            </div>
+          </div>
+          <p id="sbcDesc" class="text-[10px] text-gray-300 border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Greenwald Capex Segmentation -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-dark-700/70 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-amber-400">Capex Mantenimiento (Greenwald)</span>
+              <span id="maintCapexPctBadge" class="text-[9px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-800/60">-</span>
+            </div>
+            <div class="text-xl font-black text-white mb-1" id="maintCapexVal">-</div>
+            <div class="text-[10px] text-gray-400 mb-2 flex justify-between">
+              <span>Crecimiento: <strong id="growthCapexVal" class="text-amber-300">-</strong></span>
+              <span>Total: <strong id="totalCapexVal" class="text-gray-300">-</strong></span>
+            </div>
+          </div>
+          <p id="greenwaldEpvDesc" class="text-[10px] text-gray-300 border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Novy-Marx GPOA & Mauboussin CAP -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-dark-700/70 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-emerald-400">Foso & Productividad Activos</span>
+              <span id="gpoaBadge" class="text-[9px] px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/60">-</span>
+            </div>
+            <div class="text-xl font-black text-white mb-1" id="gpoaVal">-</div>
+            <div class="text-[10px] text-gray-400 mb-2">
+              <span>Horizonte CAP (Mauboussin): <strong id="mauboussinCapVal" class="text-emerald-300">-</strong></span>
+            </div>
+          </div>
+          <p id="mauboussinMoatDesc" class="text-[10px] text-gray-300 border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multi-Model Valuation Breakdown Table -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6">
+      <h3 class="text-base font-bold text-white mb-1">Comparativa de Modelos de Valuación</h3>
+      <p class="text-xs text-gray-400 mb-4">Desglose transparente de los diferentes enfoques aplicados al ticker.</p>
+      
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-dark-700 text-gray-400 text-[11px] uppercase tracking-wider">
+              <th class="pb-3 font-semibold">Modelo de Valuación</th>
+              <th class="pb-3 font-semibold">Valor por Acción</th>
+              <th class="pb-3 font-semibold">Desvío vs Cotización</th>
+              <th class="pb-3 font-semibold">Enfoque Teórico</th>
+            </tr>
+          </thead>
+          <tbody id="modelsTableBody" class="divide-y divide-dark-700/50">
+            <!-- Dynamic rows injected here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Laboratorio Interactivo de Sensibilidad (What-If DCF & Multiples Simulator) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-cyan-500/30">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Simulador Interactivo de Sensibilidad (What-If Analysis)</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Tiempo Real</span>
+          </h3>
+          <p class="text-xs text-gray-400">Ajustá los supuestos de crecimiento, tasa de descuento y múltiplo terminal para recalcular el valor intrínseco al instante.</p>
+        </div>
+        <button onclick="resetSensitivitySliders()" id="calcSensitivityReset" class="text-xs text-cyan-400 hover:text-cyan-300 bg-dark-800 hover:bg-dark-700 border border-dark-700 px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1.5 self-start md:self-auto">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span>Restablecer Parámetros Base</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+        <!-- Sliders (8 cols) -->
+        <div class="lg:col-span-8 space-y-4">
+          <!-- Slider 1: Growth -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-gray-300 font-medium">Tasa de Crecimiento Anual a 5 Años (g):</span>
+              <span id="sliderGrowthVal" class="font-extrabold text-cyan-400 text-sm">15.0%</span>
+            </div>
+            <input type="range" id="sliderGrowth" min="-10" max="45" step="0.5" value="15" 
+                   class="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                   oninput="onSensitivitySliderChange()">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>-10% (Recesión)</span>
+              <span>+15% (Crecimiento Sano)</span>
+              <span>+45% (Hipercrecimiento)</span>
+            </div>
+          </div>
+
+          <!-- Slider 2: WACC / Discount -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-gray-300 font-medium">Tasa de Descuento / Costo de Capital (WACC):</span>
+              <span id="sliderWaccVal" class="font-extrabold text-cyan-400 text-sm">10.0%</span>
+            </div>
+            <input type="range" id="sliderWacc" min="6" max="16" step="0.25" value="10" 
+                   class="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                   oninput="onSensitivitySliderChange()">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>6% (Tasas Bajas)</span>
+              <span>10% (Benchmark)</span>
+              <span>16% (Estrés / Alto Riesgo)</span>
+            </div>
+          </div>
+
+          <!-- Slider 3: Exit Multiple -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-gray-300 font-medium">Múltiplo Terminal Estimado (Exit P/E o P/TBV):</span>
+              <span id="sliderMultipleVal" class="font-extrabold text-cyan-400 text-sm">20.0x</span>
+            </div>
+            <input type="range" id="sliderMultiple" min="6" max="40" step="0.5" value="20" 
+                   class="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                   oninput="onSensitivitySliderChange()">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>6x (Piso Defensivo)</span>
+              <span>20x (Promedio Mercado)</span>
+              <span>40x (Euforia de Múltiplo)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Dynamic Calculation Output Card (4 cols) -->
+        <div class="lg:col-span-4 bg-dark-800/90 rounded-xl p-5 border border-cyan-500/40 text-center flex flex-col justify-between h-full">
+          <div>
+            <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Fair Value Dinámico Simulado</span>
+            <div id="simFairValue" class="text-3xl font-black text-cyan-400 mb-1">$0.00</div>
+            <div id="simMosBadge" class="inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-emerald-950 text-emerald-300 border border-emerald-800/60">-</div>
+          </div>
+          <div class="border-t border-dark-700/70 pt-3 text-[11px] text-gray-400 text-left space-y-1">
+            <div class="flex justify-between">
+              <span>Precio Actual:</span>
+              <strong id="simCurrentPrice" class="text-white">-</strong>
+            </div>
+            <div class="flex justify-between">
+              <span>Desvío vs Modelo Base:</span>
+              <strong id="simDeltaBase" class="text-gray-300">-</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Competitive Benchmarking: Empresa vs Histórico 3y vs Sector -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Benchmarking Competitivo: Empresa vs Histórico Propio vs Sector</span>
+            <span id="bmSectorName" class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">-</span>
+          </h3>
+          <p class="text-xs text-gray-400">Comparación cuantitativa contra los promedios de su industria (Damodaran & FactSet) y la trayectoria histórica de la empresa.</p>
+        </div>
+      </div>
+
+      <!-- 4 Diagnostic Badges Row -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div class="bg-dark-800/60 p-3 rounded-xl border border-dark-700/60">
+          <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Ventaja Competitiva (Moat)</span>
+          <span id="diagMoat" class="text-xs font-bold text-emerald-400 block">-</span>
+          <span id="diagMoatDetail" class="text-[10px] text-gray-400">-</span>
+        </div>
+        <div class="bg-dark-800/60 p-3 rounded-xl border border-dark-700/60">
+          <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Valuación vs Sector</span>
+          <span id="diagSectorVal" class="text-xs font-bold text-cyan-400 block">-</span>
+          <span id="diagSectorValDetail" class="text-[10px] text-gray-400">-</span>
+        </div>
+        <div class="bg-dark-800/60 p-3 rounded-xl border border-dark-700/60">
+          <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Valuación vs Propio Histórico (3y)</span>
+          <span id="diagHistVal" class="text-xs font-bold text-amber-400 block">-</span>
+          <span id="diagHistValDetail" class="text-[10px] text-gray-400">-</span>
+        </div>
+        <div class="bg-dark-800/60 p-3 rounded-xl border border-dark-700/60">
+          <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Trayectoria de Márgenes</span>
+          <span id="diagMarginTrend" class="text-xs font-bold text-indigo-400 block">-</span>
+          <span id="diagMarginTrendDetail" class="text-[10px] text-gray-400">-</span>
+        </div>
+      </div>
+
+      <!-- Benchmarking Multi-Horizon Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-dark-700 text-gray-400 text-[11px] uppercase tracking-wider">
+              <th class="pb-3 font-semibold">Métrica Financiera</th>
+              <th class="pb-3 font-semibold">Empresa Actual</th>
+              <th class="pb-3 font-semibold">Promedio Histórico (3 Años)</th>
+              <th class="pb-3 font-semibold">Mediana del Sector</th>
+              <th class="pb-3 font-semibold">Diferencial vs Sector</th>
+            </tr>
+          </thead>
+          <tbody id="benchmarkingTableBody" class="divide-y divide-dark-700/50">
+            <!-- Dynamic rows injected here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Optimization & Kelly Position Sizing -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="glass rounded-xl p-5 border border-dark-700">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Score Institucional MCDA</span>
+        <div class="flex items-baseline gap-2 mb-1">
+          <span id="mcdaScore" class="text-3xl font-black text-cyan-400">-</span>
+          <span class="text-xs text-gray-500">/ 100</span>
+        </div>
+        <p id="mcdaRating" class="text-xs text-gray-300 font-medium">-</p>
+      </div>
+
+      <div class="glass rounded-xl p-5 border border-dark-700">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Criterio de Kelly (Half-Kelly)</span>
+        <div class="flex items-baseline gap-2 mb-1">
+          <span id="kellyScore" class="text-3xl font-black text-amber-400">-</span>
+          <span class="text-xs text-gray-500">sugerido</span>
+        </div>
+        <p class="text-xs text-gray-400">Control estricto de volatilidad y gestión matemática de bankroll.</p>
+      </div>
+
+      <div class="glass rounded-xl p-5 border border-dark-700">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">WACC y Tasa de Descuento</span>
+        <div class="flex items-baseline gap-2 mb-1">
+          <span id="waccRate" class="text-3xl font-black text-white">-</span>
+        </div>
+        <p id="betaDesc" class="text-xs text-gray-400">Atenuación Bayesiana de Blume para Beta maduro.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Duel Dashboard Container (Cara a Cara) -->
+  <main id="duelDashboard" class="hidden max-w-7xl mx-auto px-4 pb-20 w-full flex-1">
+    
+    <!-- Top Duel Summary & Verdict Card -->
+    <div class="glass rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden border border-amber-500/30">
+      
+      <!-- Duel Header & Winner Verdict Banner -->
+      <div class="flex flex-col lg:flex-row items-center justify-between gap-6 border-b border-dark-700/60 pb-6 mb-6">
+        
+        <!-- Ticker A Pill -->
+        <div class="flex-1 w-full bg-dark-800/80 rounded-xl p-4 border border-cyan-500/40 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span id="duelTickerA" class="bg-cyan-950 text-cyan-400 border border-cyan-800/60 text-sm font-extrabold px-3 py-1 rounded-lg">-</span>
+            <span id="duelArchetypeA" class="text-[10px] text-gray-400 truncate max-w-[140px]">-</span>
+          </div>
+          <div id="duelCompNameA" class="text-lg font-black text-white truncate mb-1">-</div>
+          <div class="flex items-baseline gap-2 mb-2">
+            <span id="duelPriceA" class="text-2xl font-black text-white">-</span>
+            <span class="text-xs text-gray-400">USD</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs border-t border-dark-700/50 pt-2">
+            <div>
+              <span class="text-[10px] text-gray-400 block">Fair Value:</span>
+              <strong id="duelFairA" class="text-cyan-400 font-bold">-</strong>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block">Margen Seguridad:</span>
+              <strong id="duelMosA" class="font-extrabold">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Center Lightning VS Badge -->
+        <div class="flex flex-col items-center justify-center">
+          <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/30 font-black text-white text-sm mb-1 animate-pulse">
+            VS
+          </div>
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-400">Head-to-Head</span>
+        </div>
+
+        <!-- Ticker B Pill -->
+        <div class="flex-1 w-full bg-dark-800/80 rounded-xl p-4 border border-purple-500/40 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span id="duelTickerB" class="bg-purple-950 text-purple-400 border border-purple-800/60 text-sm font-extrabold px-3 py-1 rounded-lg">-</span>
+            <span id="duelArchetypeB" class="text-[10px] text-gray-400 truncate max-w-[140px]">-</span>
+          </div>
+          <div id="duelCompNameB" class="text-lg font-black text-white truncate mb-1">-</div>
+          <div class="flex items-baseline gap-2 mb-2">
+            <span id="duelPriceB" class="text-2xl font-black text-white">-</span>
+            <span class="text-xs text-gray-400">USD</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs border-t border-dark-700/50 pt-2">
+            <div>
+              <span class="text-[10px] text-gray-400 block">Fair Value:</span>
+              <strong id="duelFairB" class="text-purple-400 font-bold">-</strong>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block">Margen Seguridad:</span>
+              <strong id="duelMosB" class="font-extrabold">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Duel Copy & Print Actions -->
+        <div class="flex lg:flex-col gap-2">
+          <button onclick="copyDuelReport()" id="btnCopyDuel" title="Copiar Duelo al Portapapeles" class="h-12 lg:h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-amber-300">Copiar</span>
+          </button>
+          <button onclick="window.print()" title="Imprimir o Guardar PDF" class="h-12 lg:h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-blue-300">PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Duel Champion Banner -->
+      <div id="duelWinnerBanner" class="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-dark-800/80 to-purple-950/40 border border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="text-3xl">🏆</div>
+          <div>
+            <div class="text-xs uppercase font-extrabold text-amber-400 tracking-wider">Veredicto Cuantitativo del Duelo</div>
+            <div id="duelWinnerText" class="text-base font-black text-white">-</div>
+          </div>
+        </div>
+        <div id="duelWinnerScore" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-dark-900/90 text-amber-300 border border-amber-500/40">-</div>
+      </div>
+    </div>
+
+    <!-- Charts & TIR Row (Dual Radar & TIR comparison) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+      
+      <!-- Dual Radar Chart (6 cols) -->
+      <div class="lg:col-span-6 glass rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span>Radar Cuantitativo Superpuesto (5 Ejes)</span>
+              <span class="text-[10px] bg-dark-700 text-gray-300 px-2 py-0.5 rounded font-medium">Head-to-Head</span>
+            </h3>
+          </div>
+          <p class="text-xs text-gray-400 mb-3">Comparación de Solidez en Valor, Crecimiento Futuro, Rendimiento Pasado, Salud Financiera y Dividendos.</p>
+          <div class="h-[260px] relative flex items-center justify-center">
+            <canvas id="duelRadarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Pillar scores side by side -->
+        <div class="grid grid-cols-5 gap-1.5 mt-4 pt-3 border-t border-dark-700/60 text-center text-[10px]">
+          <div class="bg-dark-800/60 p-1.5 rounded">
+            <span class="text-gray-400 block font-bold uppercase text-[8px]">Valor</span>
+            <span id="duelScoreV" class="font-extrabold text-white">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1.5 rounded">
+            <span class="text-gray-400 block font-bold uppercase text-[8px]">Futuro</span>
+            <span id="duelScoreF" class="font-extrabold text-white">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1.5 rounded">
+            <span class="text-gray-400 block font-bold uppercase text-[8px]">Pasado</span>
+            <span id="duelScoreP" class="font-extrabold text-white">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1.5 rounded">
+            <span class="text-gray-400 block font-bold uppercase text-[8px]">Salud</span>
+            <span id="duelScoreH" class="font-extrabold text-white">-</span>
+          </div>
+          <div class="bg-dark-800/60 p-1.5 rounded">
+            <span class="text-gray-400 block font-bold uppercase text-[8px]">Dividendos</span>
+            <span id="duelScoreD" class="font-extrabold text-white">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TIR a 5 Años Cara a Cara (6 cols) -->
+      <div class="lg:col-span-6 glass rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span>Retorno Compuesto a 5 Años (TIR Cara a Cara)</span>
+              <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">CAGR Proyectado</span>
+            </h3>
+          </div>
+          <p class="text-xs text-gray-400 mb-4">¿Cuál acción ofrece mejor rendimiento anual proyectado si converge a su valor intrínseco?</p>
+
+          <div class="space-y-3">
+            <!-- Expected TIR comparison box -->
+            <div class="bg-dark-800/80 p-3.5 rounded-xl border border-dark-700/80">
+              <div class="text-[10px] uppercase font-bold text-gray-400 mb-1">TIR Ponderada E[TIR] a 5 Años</div>
+              <div class="grid grid-cols-2 gap-4 text-center">
+                <div class="p-2 rounded-lg bg-cyan-950/40 border border-cyan-800/40">
+                  <span id="duelTirTickerA" class="text-xs font-bold text-cyan-400 block">-</span>
+                  <div id="duelTirExpectedA" class="text-2xl font-black text-cyan-300">-</div>
+                  <span id="duelTirSpreadA" class="text-[10px] text-gray-400">-</span>
+                </div>
+                <div class="p-2 rounded-lg bg-purple-950/40 border border-purple-800/40">
+                  <span id="duelTirTickerB" class="text-xs font-bold text-purple-400 block">-</span>
+                  <div id="duelTirExpectedB" class="text-2xl font-black text-purple-300">-</div>
+                  <span id="duelTirSpreadB" class="text-[10px] text-gray-400">-</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scenarios breakdown row -->
+            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+              <div class="bg-dark-800/60 p-2.5 rounded-xl border border-dark-700/50">
+                <span class="text-[10px] text-gray-400 block uppercase font-semibold">Escenario Base</span>
+                <div class="mt-1 flex justify-around font-extrabold">
+                  <span id="duelTirBaseA" class="text-cyan-400">-</span>
+                  <span class="text-gray-500">vs</span>
+                  <span id="duelTirBaseB" class="text-purple-400">-</span>
+                </div>
+              </div>
+              <div class="bg-dark-800/60 p-2.5 rounded-xl border border-dark-700/50">
+                <span class="text-[10px] text-gray-400 block uppercase font-semibold">Escenario Bull</span>
+                <div class="mt-1 flex justify-around font-extrabold">
+                  <span id="duelTirBullA" class="text-cyan-400">-</span>
+                  <span class="text-gray-500">vs</span>
+                  <span id="duelTirBullB" class="text-purple-400">-</span>
+                </div>
+              </div>
+              <div class="bg-dark-800/60 p-2.5 rounded-xl border border-dark-700/50">
+                <span class="text-[10px] text-gray-400 block uppercase font-semibold">Escenario Bear</span>
+                <div class="mt-1 flex justify-around font-extrabold">
+                  <span id="duelTirBearA" class="text-cyan-400">-</span>
+                  <span class="text-gray-500">vs</span>
+                  <span id="duelTirBearB" class="text-purple-400">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-dark-700/60 text-xs flex justify-between text-gray-400">
+          <span>Benchmark Histórico S&P 500: <strong>10.0% anual</strong></span>
+          <span>Bono Tesoro 10Y: <strong>4.1% anual</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla Cara a Cara (Tale of the Tape - Métrica por Métrica) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Duelo Detallado: Métrica por Métrica (Tale of the Tape)</span>
+            <span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800/60 px-2 py-0.5 rounded font-medium">Auditoría Cuantitativa</span>
+          </h3>
+          <p class="text-xs text-gray-400">Comparativa directa con identificación automática de la ventaja en cada indicador financiero.</p>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-cyan-400 inline-block"></span><strong id="legendA">-</strong></span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-purple-400 inline-block"></span><strong id="legendB">-</strong></span>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-dark-700 text-gray-400 text-[11px] uppercase tracking-wider">
+              <th class="pb-3 font-semibold w-1/3">Dimensión Financiera / Indicador</th>
+              <th class="pb-3 font-semibold text-center w-1/4" id="thHeaderA">Ticker A</th>
+              <th class="pb-3 font-semibold text-center w-1/4" id="thHeaderB">Ticker B</th>
+              <th class="pb-3 font-semibold text-center w-1/6">Ventaja Ganador</th>
+            </tr>
+          </thead>
+          <tbody id="duelTableBody" class="divide-y divide-dark-700/50">
+            <!-- Dynamic rows injected here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none glass px-4 py-3 rounded-xl border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-2xl flex items-center gap-2">
+    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+    <span id="toastMsg">¡Resumen ejecutivo copiado al portapapeles!</span>
+  </div>
+
+  <!-- Footer & Disclaimer -->
+  <footer class="border-t border-dark-700/60 py-10 px-4 text-center text-xs text-gray-500">
+    <!-- Legal Financial Disclaimer -->
+    <div class="mb-6 p-5 rounded-2xl bg-dark-800/80 border border-dark-700/80 text-[11px] text-gray-400 max-w-4xl mx-auto text-left leading-relaxed shadow-xl">
+      <div class="flex items-center gap-2 text-amber-400 font-bold mb-2">
+        <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <span class="text-xs uppercase tracking-wider text-amber-300">Descargo de Responsabilidad (Disclaimer Financiero & Legal)</span>
+      </div>
+      <p class="text-gray-400">
+        La información, modelos algorítmicos, estimaciones de valor intrínseco, simulación de Monte Carlo y análisis de sensibilidad provistos en esta plataforma tienen fines exclusivamente educativos y de investigación cuantitativa. 
+        <strong class="text-gray-200">No constituyen asesoramiento financiero, recomendación de inversión, patrocinio ni solicitud para comprar o vender activo financiero alguno.</strong>
+        Los modelos estocásticos y proyecciones fundamentales se basan en hipótesis estadísticas y datos contables públicos que pueden contener desfasajes temporales o revisiones. 
+        Todo inversor debe realizar su propio análisis independiente de debida diligencia (Due Diligence) o consultar con un profesional o asesor financiero regulado antes de tomar decisiones de inversión. El rendimiento histórico no garantiza rentabilidades futuras.
+      </p>
+    </div>
+    <p>QuantVal Institutional Engine &bull; Plataforma Cuantitativa de Valuación Fundamental &bull; 2026</p>
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    let mcChartInstance = null;
+    let radarChartInstance = null;
+    let duelRadarChartInstance = null;
+    let currentData = null;
+    let currentDuelDataA = null;
+    let currentDuelDataB = null;
+    let currentViewMode = 'single';
+
+    function switchViewMode(mode) {
+      currentViewMode = mode;
+      const tabS = document.getElementById('tabSingle');
+      const tabD = document.getElementById('tabDuel');
+      const singleSearch = document.getElementById('singleSearchWrapper');
+      const duelSearch = document.getElementById('duelSearchWrapper');
+      const singleDash = document.getElementById('dashboard');
+      const duelDash = document.getElementById('duelDashboard');
+
+      if (mode === 'duel') {
+        tabD.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-lg shadow-amber-500/20 flex items-center gap-2";
+        tabS.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-cyan-500/50 flex items-center gap-2";
+        singleSearch.classList.add('hidden');
+        duelSearch.classList.remove('hidden');
+        singleDash.classList.add('hidden');
+        duelDash.classList.remove('hidden');
+
+        if (!currentDuelDataA || !currentDuelDataB) {
+          evaluateDuel('NVDA', 'AMD');
+        }
+      } else {
+        tabS.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 flex items-center gap-2";
+        tabD.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-amber-500/50 flex items-center gap-2";
+        duelSearch.classList.add('hidden');
+        singleSearch.classList.remove('hidden');
+        duelDash.classList.add('hidden');
+        singleDash.classList.remove('hidden');
+      }
+    }
+
+    async function evaluateTicker(ticker) {
+      const match = ticker.match(/^([A-Za-z0-9\.\-]+)\s*(?:vs\.?|contra|\/|,|-)\s*([A-Za-z0-9\.\-]+)$/i);
+      if (match) {
+        switchViewMode('duel');
+        evaluateDuel(match[1], match[2]);
+        return;
+      }
+
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('dashboard').classList.add('opacity-30', 'pointer-events-none');
+      document.getElementById('loadingTitle').innerText = `Evaluando ${ticker.toUpperCase()}...`;
+
+      try {
+        const resp = await fetch(`/api/evaluate/${ticker}`);
+        if (!resp.ok) {
+          throw new Error(await resp.text());
+        }
+        const data = await resp.json();
+        renderDashboard(data);
+      } catch (err) {
+        alert("Error al valuar el ticker: " + err.message);
+      } finally {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('opacity-30', 'pointer-events-none');
+      }
+    }
+
+    function renderDashboard(d) {
+      currentData = d;
+      const v = d.valuation_summary;
+      const isBank = (d.archetype === "FINANCIALS_BANKING");
+
+      // Header info
+      document.getElementById('compName').innerText = d.company_name;
+      document.getElementById('tickerBadge').innerText = d.ticker;
+      document.getElementById('archetypeBadge').innerText = d.archetype_label;
+      document.getElementById('compSector').innerText = `${d.sector} &bull; ${d.industry}`;
+
+      // Verdict
+      document.getElementById('verdictText').innerText = v.verdict;
+      document.getElementById('mosValue').innerText = `${v.margin_of_safety_pct > 0 ? '+' : ''}${v.margin_of_safety_pct.toFixed(2)}%`;
+      
+      const vBox = document.getElementById('verdictBox');
+      if (v.margin_of_safety_pct >= 10) {
+        vBox.className = "p-3.5 px-6 rounded-xl flex items-center gap-4 bg-emerald-950/40 border border-emerald-800/40";
+        document.getElementById('verdictText').className = "text-base font-extrabold text-emerald-400";
+      } else if (v.margin_of_safety_pct >= -10) {
+        vBox.className = "p-3.5 px-6 rounded-xl flex items-center gap-4 bg-amber-950/40 border border-amber-800/40";
+        document.getElementById('verdictText').className = "text-base font-extrabold text-amber-400";
+      } else {
+        vBox.className = "p-3.5 px-6 rounded-xl flex items-center gap-4 bg-rose-950/40 border border-rose-800/40";
+        document.getElementById('verdictText').className = "text-base font-extrabold text-rose-400";
+      }
+
+      // Key metrics
+      document.getElementById('currPrice').innerText = `$${v.current_price.toFixed(2)}`;
+      document.getElementById('fairValue').innerText = `$${v.composite_fair_value.toFixed(2)}`;
+      document.getElementById('mcMedian').innerText = `$${d.monte_carlo_simulation.median_fair_value.toFixed(2)}`;
+      document.getElementById('wsTarget').innerText = `$${d.market_sentiment_and_ownership.target_mean_price.toFixed(2)}`;
+
+      // Valuation Spectrum Gauge
+      renderValuationSpectrum(v.current_price, d.monte_carlo_simulation);
+
+      // Audit Alert Banner
+      const alertBox = document.getElementById('auditAlertBox');
+      const adj = d.accounting_adjustments;
+      if (adj && (adj.fcf_distortion_detected || adj.is_cyclical)) {
+        alertBox.classList.remove('hidden');
+        let notes = [];
+        if (adj.fcf_distortion_detected && !isBank) {
+          notes.push(`<strong>Float Transaccional Normalizado:</strong> ${adj.fcf_adjustment_note}. FCF contable de $${(adj.raw_fcf/1e9).toFixed(2)}B calibrado a $${(adj.sustainable_fcf/1e9).toFixed(2)}B de FCF económico real distribuible.`);
+        }
+        if (adj.is_cyclical) {
+          notes.push(`<strong>Anti-Peak Multiple Trap:</strong> ${adj.cyclical_note}. Múltiplo Forward P/E comprimido a ${adj.fair_pe_applied}x para utilidades pico de ciclo.`);
+        }
+        document.getElementById('auditAlertBody').innerHTML = notes.join('<br class="my-1"/>');
+      } else {
+        alertBox.classList.add('hidden');
+      }
+
+      // Monte Carlo
+      const mc = d.monte_carlo_simulation;
+      document.getElementById('probUndervalued').innerText = `${mc.prob_undervalued_pct.toFixed(1)}%`;
+      document.getElementById('p10Val').innerText = `$${mc.percentile_10_floor.toFixed(2)}`;
+      document.getElementById('p25Val').innerText = `$${mc.percentile_25_defensive.toFixed(2)}`;
+      document.getElementById('p50Val').innerText = `$${mc.median_fair_value.toFixed(2)}`;
+      document.getElementById('p75Val').innerText = `$${mc.percentile_75_optimistic.toFixed(2)}`;
+      document.getElementById('p90Val').innerText = `$${mc.percentile_90_bull_ceiling.toFixed(2)}`;
+      renderMonteCarloChart(mc, v.current_price);
+
+      // Snowflake Radar
+      const snow = d.snowflake_scores || { value: 50, future: 50, past: 50, health: 50, dividends: 50 };
+      document.getElementById('snowVal').innerText = `${snow.value.toFixed(0)}`;
+      document.getElementById('snowFut').innerText = `${snow.future.toFixed(0)}`;
+      document.getElementById('snowPast').innerText = `${snow.past.toFixed(0)}`;
+      document.getElementById('snowHealth').innerText = `${snow.health.toFixed(0)}`;
+      document.getElementById('snowDiv').innerText = `${snow.dividends.toFixed(0)}`;
+      renderSnowflakeRadar(snow);
+
+      // Reverse DCF / Expectations & Shareholder Yield
+      const rd = d.reverse_dcf;
+      if (isBank) {
+        document.getElementById('reverseMetricLabel').innerText = "Spread ROE Implícito";
+        document.getElementById('impliedGrowth').innerText = `${rd.implied_fcf_growth_5y_pct > 0 ? '+' : ''}${rd.implied_fcf_growth_5y_pct.toFixed(1)}%`;
+        document.getElementById('consensusGrowth').innerText = `ROE ${d.latest_financials.roe ? d.latest_financials.roe.toFixed(1) : '15'}% Actual`;
+      } else {
+        document.getElementById('reverseMetricLabel').innerText = "Crecimiento FCF Implícito";
+        document.getElementById('impliedGrowth').innerText = `${rd.implied_fcf_growth_5y_pct.toFixed(1)}%`;
+        document.getElementById('consensusGrowth').innerText = `${rd.consensus_revenue_growth_pct.toFixed(1)}% YoY`;
+      }
+      document.getElementById('sentimentDiag').innerText = rd.market_sentiment;
+
+      const sy = d.shareholder_yield || {};
+      document.getElementById('totalShareholderYield').innerText = `${sy.total_shareholder_yield_pct?.toFixed(2) || '0.00'}%`;
+      document.getElementById('divYieldVal').innerText = `${sy.dividend_yield_pct?.toFixed(2) || '0.00'}%`;
+      document.getElementById('buybackYieldVal').innerText = `${sy.buyback_annual_yield_pct?.toFixed(2) || '0.00'}%`;
+      document.getElementById('payoutVal').innerText = `${sy.payout_ratio_pct?.toFixed(0) || '0'}%`;
+      document.getElementById('buybackStatusBadge').innerText = sy.buyback_status || 'Estable';
+      document.getElementById('instOwn').innerText = `${d.market_sentiment_and_ownership.institutional_ownership_pct.toFixed(1)}%`;
+
+      // Quality cards
+      const piot = d.piotroski_fscore;
+      document.getElementById('piotScore').innerText = `${piot.total_score}/9`;
+      document.getElementById('piotBar').style.width = `${(piot.total_score / 9) * 100}%`;
+
+      const mayer = d.mayer_100_bagger_metrics;
+      if (isBank) {
+        document.getElementById('mayerRoic').innerText = `${d.latest_financials.roe ? d.latest_financials.roe.toFixed(1) : '15'}%`;
+        const spreadRoe = (d.latest_financials.roe - (d.cost_of_capital.wacc * 100));
+        document.getElementById('roicSpread').innerText = `ROE vs Costo Equity (${(d.cost_of_capital.wacc*100).toFixed(1)}%): ${spreadRoe >= 0 ? '+' : ''}${spreadRoe.toFixed(1)}%`;
+      } else {
+        document.getElementById('mayerRoic').innerText = `${(mayer.roic * 100).toFixed(1)}%`;
+        const spread = (mayer.roic - d.cost_of_capital.wacc) * 100;
+        document.getElementById('roicSpread').innerText = `Spread WACC: +${spread.toFixed(1)}%`;
+      }
+
+      const alt = d.altman_solvency;
+      document.getElementById('altmanTitle').innerText = alt.model_used.includes("Equity") ? "Solvencia Bancaria" : (alt.model_used.includes("Z''") ? "Altman Z'' (Tech)" : "Altman Z (Industrial)");
+      document.getElementById('altmanScore').innerText = isBank ? `${alt.z_score.toFixed(1)}%` : alt.z_score.toFixed(2);
+      document.getElementById('altmanZone').innerText = alt.zone;
+
+      // Tech or Capital Intensity or Bank Yield
+      const kpi = d.tech_asset_light_kpis;
+      if (isBank) {
+        document.getElementById('techKpiTitle').innerText = "P/TBV Justificado";
+        document.getElementById('techKpiValue').innerText = `${d.valuation_models.justified_pb_ratio ? d.valuation_models.justified_pb_ratio.toFixed(2) : '2.0'}x`;
+        document.getElementById('techKpiSubtitle').innerText = `$${(d.valuation_models.val_pb_justified || v.current_price).toFixed(2)} USD`;
+        document.getElementById('techKpiDesc').innerText = `BVPS: $${d.latest_financials.bvps.toFixed(2)} USD &bull; ROE: ${d.latest_financials.roe.toFixed(1)}%`;
+      } else if (kpi.is_tech_asset_light) {
+        document.getElementById('techKpiTitle').innerText = "Regla del 40";
+        document.getElementById('techKpiValue').innerText = `${kpi.rule_of_40_score.toFixed(1)}%`;
+        document.getElementById('techKpiSubtitle').innerText = kpi.rule_of_40_status;
+        document.getElementById('techKpiDesc').innerText = `Capex: ${kpi.capital_intensity_pct.toFixed(1)}% &bull; FCF/NI: ${kpi.fcf_conversion_ni_pct.toFixed(0)}%`;
+      } else {
+        document.getElementById('techKpiTitle').innerText = "Intensidad Capex";
+        document.getElementById('techKpiValue').innerText = `${kpi.capital_intensity_pct.toFixed(1)}%`;
+        document.getElementById('techKpiSubtitle').innerText = "Modelo Capital Intensivo";
+        document.getElementById('techKpiDesc').innerText = `Deuda/EBITDA: ${mayer.net_debt_to_ebitda.toFixed(2)}x`;
+      }
+
+      // MCDA & Kelly
+      const opt = d.operations_research_optimization;
+      document.getElementById('mcdaScore').innerText = opt.mcda_composite_score_100.toFixed(0);
+      document.getElementById('mcdaRating').innerText = opt.mcda_conviction_rating;
+      document.getElementById('kellyScore').innerText = `${opt.half_kelly_recommended_pct.toFixed(1)}%`;
+      document.getElementById('waccRate').innerText = `${(d.cost_of_capital.wacc * 100).toFixed(2)}%`;
+      document.getElementById('betaDesc').innerText = `Beta Blume: ${d.beta.blume_adjusted_beta.toFixed(2)} (Raw: ${d.beta.raw_beta.toFixed(2)})`;
+
+      // Probabilistic Scenarios, Expected CAGR, Forensics, Price Sensitivity, Checklist & Sensitivity Simulator
+      renderProbabilisticScenarios(d.probabilistic_scenarios);
+      renderExpectedCagr(d.expected_5y_cagr);
+      renderAcademicForensics(d.academic_forensics, d.archetype);
+      renderPriceSensitivity(v.composite_fair_value, v.current_price, d.monte_carlo_simulation.percentile_10_floor);
+      renderChecklist(d);
+      initSensitivitySliders(d);
+
+      // Valuation table & Benchmarking
+      renderTable(d);
+      renderBenchmarking(d);
+    }
+
+    function renderProbabilisticScenarios(sc) {
+      if (!sc) return;
+      document.getElementById('scenarioEV').innerText = `$${sc.expected_weighted_fair_value.toFixed(2)}`;
+
+      document.getElementById('scenBearVal').innerText = `$${sc.bear.fair_value.toFixed(2)}`;
+      document.getElementById('scenBearGrowth').innerText = `${sc.bear.growth_assumed_pct > 0 ? '+' : ''}${sc.bear.growth_assumed_pct.toFixed(1)}%`;
+      document.getElementById('scenBearWacc').innerText = `${sc.bear.wacc_assumed_pct.toFixed(2)}%`;
+      document.getElementById('scenBearHypo').innerText = `"${sc.bear.hypothesis}"`;
+
+      document.getElementById('scenBaseVal').innerText = `$${sc.base.fair_value.toFixed(2)}`;
+      document.getElementById('scenBaseGrowth').innerText = `${sc.base.growth_assumed_pct > 0 ? '+' : ''}${sc.base.growth_assumed_pct.toFixed(1)}%`;
+      document.getElementById('scenBaseWacc').innerText = `${sc.base.wacc_assumed_pct.toFixed(2)}%`;
+      document.getElementById('scenBaseHypo').innerText = `"${sc.base.hypothesis}"`;
+
+      document.getElementById('scenBullVal').innerText = `$${sc.bull.fair_value.toFixed(2)}`;
+      document.getElementById('scenBullGrowth').innerText = `${sc.bull.growth_assumed_pct > 0 ? '+' : ''}${sc.bull.growth_assumed_pct.toFixed(1)}%`;
+      document.getElementById('scenBullWacc').innerText = `${sc.bull.wacc_assumed_pct.toFixed(2)}%`;
+      document.getElementById('scenBullHypo').innerText = `"${sc.bull.hypothesis}"`;
+    }
+
+    function renderExpectedCagr(cagr) {
+      if (!cagr) return;
+      document.getElementById('tirExpected').innerText = `${cagr.cagr_expected_weighted_pct >= 0 ? '+' : ''}${cagr.cagr_expected_weighted_pct.toFixed(1)}%`;
+      document.getElementById('tirBase').innerText = `${cagr.cagr_base_pct >= 0 ? '+' : ''}${cagr.cagr_base_pct.toFixed(1)}%`;
+      document.getElementById('tirBull').innerText = `${cagr.cagr_bull_pct >= 0 ? '+' : ''}${cagr.cagr_bull_pct.toFixed(1)}%`;
+      document.getElementById('tirBear').innerText = `${cagr.cagr_bear_pct >= 0 ? '+' : ''}${cagr.cagr_bear_pct.toFixed(1)}%`;
+
+      const spSpread = cagr.sp500_spread_pct;
+      const spElem = document.getElementById('tirSpSpread');
+      spElem.innerText = `${spSpread >= 0 ? '+' : ''}${spSpread.toFixed(1)}% pts`;
+      spElem.className = spSpread >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+
+      const trSpread = cagr.treasury_spread_pct;
+      const trElem = document.getElementById('tirTreasurySpread');
+      trElem.innerText = `${trSpread >= 0 ? '+' : ''}${trSpread.toFixed(1)}% pts`;
+      trElem.className = trSpread >= 0 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold';
+
+      const badge = document.getElementById('cagrVerdictBadge');
+      badge.innerText = cagr.cagr_verdict;
+      if (cagr.cagr_expected_weighted_pct >= 12.0) {
+        badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-800/60 self-start md:self-auto";
+      } else if (cagr.cagr_expected_weighted_pct >= 5.0) {
+        badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-950 text-amber-300 border border-amber-800/60 self-start md:self-auto";
+      } else {
+        badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-950 text-rose-300 border border-rose-800/60 self-start md:self-auto";
+      }
+    }
+
+    function renderAcademicForensics(af, archetype) {
+      if (!af) return;
+      const isBank = (archetype === "FINANCIALS_BANKING");
+
+      // 1. Sloan Accruals (1996)
+      const sl = af.sloan_accruals || {};
+      document.getElementById('sloanRatioVal').innerText = `${sl.accrual_ratio_pct >= 0 ? '+' : ''}${sl.accrual_ratio_pct.toFixed(2)}%`;
+      const sBadge = document.getElementById('sloanBadge');
+      sBadge.innerText = sl.quality_grade || 'SANA';
+      if (sl.quality_grade === 'ALTA_CALIDAD') {
+        sBadge.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+      } else if (sl.quality_grade === 'SANA') {
+        sBadge.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60";
+      } else {
+        sBadge.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-rose-950 text-rose-300 border border-rose-800/60";
+      }
+      document.getElementById('sloanDesc').innerText = sl.quality_rating || '-';
+
+      // 2. Damodaran SBC & Real FCF
+      const sbc = af.damodaran_sbc || {};
+      if (isBank) {
+        document.getElementById('realFcfVal').innerText = "No Aplicable (Banca)";
+        document.getElementById('sbcIntensityBadge').innerText = "Sector Financiero";
+        document.getElementById('reportedFcfVal').innerText = "N/D";
+        document.getElementById('sbcAmountVal').innerText = "$0.00B";
+        document.getElementById('sbcDesc').innerText = "En banca, la rentabilidad se mide vía ROE y capitalización patrimonial en lugar de FCF.";
+      } else {
+        document.getElementById('realFcfVal').innerText = `$${(sbc.real_economic_fcf / 1e9).toFixed(2)}B`;
+        document.getElementById('sbcIntensityBadge').innerText = `${sbc.sbc_pct_revenue.toFixed(1)}% Ventas`;
+        document.getElementById('reportedFcfVal').innerText = `$${(sbc.reported_fcf / 1e9).toFixed(1)}B`;
+        document.getElementById('sbcAmountVal').innerText = `$${(sbc.stock_based_compensation / 1e9).toFixed(2)}B`;
+        document.getElementById('sbcDesc').innerText = `${sbc.dilution_drag_note} Absorción de recompras brutas: ${sbc.sbc_dilution_offset_pct.toFixed(1)}%.`;
+      }
+
+      // 3. Greenwald Capex Segmentation & Adjusted EPV
+      const gw = af.greenwald_capex || {};
+      if (isBank) {
+        document.getElementById('maintCapexVal').innerText = "No Aplicable";
+        document.getElementById('maintCapexPctBadge').innerText = "Banca";
+        document.getElementById('growthCapexVal').innerText = "$0.00B";
+        document.getElementById('totalCapexVal').innerText = "$0.00B";
+        document.getElementById('greenwaldEpvDesc').innerText = "Valuación guiada por adecuación de capital (Equity/Assets) y P/TBV Justificado.";
+      } else {
+        document.getElementById('maintCapexVal').innerText = `$${(gw.maintenance_capex / 1e9).toFixed(2)}B`;
+        document.getElementById('maintCapexPctBadge').innerText = `${gw.maintenance_capex_pct.toFixed(0)}% Mantenimiento`;
+        document.getElementById('growthCapexVal').innerText = `$${(gw.growth_capex / 1e9).toFixed(2)}B`;
+        document.getElementById('totalCapexVal').innerText = `$${(gw.total_capex / 1e9).toFixed(2)}B`;
+        document.getElementById('greenwaldEpvDesc').innerText = `EPV Ajustado (Greenwald): $${gw.greenwald_adjusted_epv.toFixed(2)} USD (Beneficios normalizados descontando únicamente Capex de Mantenimiento).`;
+      }
+
+      // 4. Novy-Marx GPOA & Mauboussin CAP
+      const nm = af.novy_marx_profitability || {};
+      const mb = af.mauboussin_moat || {};
+      document.getElementById('gpoaVal').innerText = isBank ? "N/D (Banca)" : `${nm.gpoa_pct.toFixed(1)}% GPOA`;
+      document.getElementById('gpoaBadge').innerText = isBank ? "Banca" : (nm.gpoa_pct >= 40 ? "Élite (>40%)" : (nm.gpoa_pct >= 25 ? "Alto" : "Normal"));
+      document.getElementById('mauboussinCapVal').innerText = `${mb.cap_years || 5} Años`;
+      document.getElementById('mauboussinMoatDesc').innerText = mb.fade_horizon_note || '-';
+    }
+
+    function renderPriceSensitivity(fairValue, currentPrice, p10) {
+      const tDef = fairValue * 0.70; // 30% MoS
+      const tMod = fairValue * 0.80; // 20% MoS
+      const tAgg = fairValue * 0.90; // 10% MoS
+      const tP10 = p10;
+
+      document.getElementById('targetDefensive').innerText = `$${tDef.toFixed(2)}`;
+      document.getElementById('targetModerate').innerText = `$${tMod.toFixed(2)}`;
+      document.getElementById('targetAggressive').innerText = `$${tAgg.toFixed(2)}`;
+      document.getElementById('targetP10').innerText = `$${tP10.toFixed(2)}`;
+
+      const badge = document.getElementById('dcaStatusBadge');
+      if (currentPrice <= fairValue) {
+        const discount = ((fairValue - currentPrice) / fairValue) * 100;
+        badge.className = "text-xs font-bold px-2.5 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+        badge.innerText = `Cotiza con descuento de ${discount.toFixed(1)}%`;
+      } else {
+        const premium = ((currentPrice - fairValue) / fairValue) * 100;
+        badge.className = "text-xs font-bold px-2.5 py-0.5 rounded-md bg-rose-950 text-rose-300 border border-rose-800/60";
+        badge.innerText = `Cotiza con prima de +${premium.toFixed(1)}%`;
+      }
+    }
+
+    function renderChecklist(d) {
+      const isBank = (d.archetype === "FINANCIALS_BANKING");
+      const f = d.latest_financials;
+      const mayer = d.mayer_100_bagger_metrics;
+      const solv = d.altman_solvency;
+      const piot = d.piotroski_fscore;
+      const sy = d.shareholder_yield || {};
+      const v = d.valuation_summary;
+      const mc = d.monte_carlo_simulation;
+      const waccPct = d.cost_of_capital.wacc * 100;
+
+      const returnVal = isBank ? (f.roe || 0) : (mayer.roic * 100);
+      const spreadReturn = returnVal - waccPct;
+      const c1_pass = spreadReturn > 0;
+
+      const c2_pass = isBank ? (f.net_margin > 0.15) : (f.fcf > 0 && f.fcf_margin > 0.05);
+      const c3_pass = isBank ? (f.roe >= 12.0) : (f.operating_margin >= 0.12);
+      const c4_pass = isBank ? (solv.z_score >= 8.0) : (mayer.net_debt_to_ebitda <= 2.5);
+      const c5_pass = piot.total_score >= 5;
+      const c6_pass = !solv.zone.includes("Peligro") && !solv.zone.includes("Distress");
+      const c7_pass = (sy.net_share_change_3y_pct || 0) <= 2.0;
+      const c8_pass = v.margin_of_safety_pct >= -10.0 || v.current_price <= mc.percentile_75_optimistic;
+
+      const items = [
+        {
+          name: "Retorno Capital > WACC",
+          pass: c1_pass,
+          metric: `${isBank ? 'ROE' : 'ROIC'} ${returnVal.toFixed(1)}% vs Costo ${waccPct.toFixed(1)}%`,
+          detail: c1_pass ? `Crea valor económico (+${spreadReturn.toFixed(1)}% spread)` : "Destruye valor económico sobre WACC"
+        },
+        {
+          name: "Generación Libre de Caja",
+          pass: c2_pass,
+          metric: isBank ? `Margen Neto ${(f.net_margin*100).toFixed(1)}%` : `FCF ${(f.fcf_margin*100).toFixed(1)}% Ventas`,
+          detail: c2_pass ? "Caja operativa libre positiva y sostenible" : "Flujo de caja libre negativo o comprimido"
+        },
+        {
+          name: "Margen Operativo Sólido",
+          pass: c3_pass,
+          metric: isBank ? `ROE ${f.roe ? f.roe.toFixed(1) : '15'}%` : `Margen EBIT ${(f.operating_margin*100).toFixed(1)}%`,
+          detail: c3_pass ? "Poder de fijación de precios y rentabilidad" : "Margen vulnerable a competencia"
+        },
+        {
+          name: "Apalancamiento y Deuda",
+          pass: c4_pass,
+          metric: isBank ? `Solvencia ${solv.z_score.toFixed(1)}%` : `Deuda/EBITDA ${mayer.net_debt_to_ebitda.toFixed(2)}x`,
+          detail: c4_pass ? "Balance sano sin exceso de endeudamiento" : "Nivel de apalancamiento elevado"
+        },
+        {
+          name: "Salud Contable Auditada",
+          pass: c5_pass,
+          metric: `F-Score ${piot.total_score}/9 (${piot.category})`,
+          detail: c5_pass ? "Sin alertas de deterioro contable" : "Señales de alerta en estados financieros"
+        },
+        {
+          name: "Riesgo de Quiebra (Altman)",
+          pass: c6_pass,
+          metric: `${solv.z_score.toFixed(2)} [${solv.zone}]`,
+          detail: c6_pass ? "Solvencia patrimonial asegurada" : "Riesgo de insolvencia o estrés severo"
+        },
+        {
+          name: "Disciplina de Acciones",
+          pass: c7_pass,
+          metric: sy.buyback_status || "Estable",
+          detail: c7_pass ? "Sin dilución agresiva a accionistas" : "Dilución neta continua de capital"
+        },
+        {
+          name: "Valuación Racional / MoS",
+          pass: c8_pass,
+          metric: `MoS ${v.margin_of_safety_pct >= 0 ? '+' : ''}${v.margin_of_safety_pct.toFixed(1)}%`,
+          detail: c8_pass ? "Cotización dentro de rangos estadísticos" : "Prima exigente sobre el valor justo"
+        }
+      ];
+
+      const grid = document.getElementById('checklistGrid');
+      grid.innerHTML = '';
+      let passedCount = 0;
+
+      items.forEach(it => {
+        if (it.pass) passedCount++;
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-xl border ${it.pass ? 'bg-emerald-950/20 border-emerald-800/40 text-gray-200' : 'bg-rose-950/20 border-rose-800/40 text-gray-300'}`;
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-xs ${it.pass ? 'text-emerald-400' : 'text-rose-400'} flex items-center gap-1">
+              <span>${it.pass ? '✓' : '✗'}</span>
+              <span>${it.name}</span>
+            </span>
+          </div>
+          <div class="text-[11px] font-semibold text-white mb-0.5">${it.metric}</div>
+          <div class="text-[10px] text-gray-400 leading-tight">${it.detail}</div>
+        `;
+        grid.appendChild(card);
+      });
+
+      const badge = document.getElementById('checklistScoreBadge');
+      const verd = document.getElementById('checklistVerdict');
+      badge.innerText = `${passedCount}/8 Aprobados`;
+
+      if (passedCount >= 7) {
+        badge.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+        verd.innerText = "🟢 Calidad Institucional Excepcional (Apto Inversión)";
+        verd.className = "text-xs font-bold text-emerald-400";
+      } else if (passedCount >= 5) {
+        badge.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-800/60";
+        verd.innerText = "🟡 Calidad Aceptable con Monitoreo de Riesgos";
+        verd.className = "text-xs font-bold text-amber-400";
+      } else {
+        badge.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-rose-950 text-rose-300 border border-rose-800/60";
+        verd.innerText = "🔴 Alerta Fundamental / Perfil de Riesgo Especulativo";
+        verd.className = "text-xs font-bold text-rose-400";
+      }
+    }
+
+    let baseGrowth = 15;
+    let baseWacc = 10;
+    let baseMultiple = 20;
+    let baseFairValue = 100;
+
+    function initSensitivitySliders(d) {
+      baseGrowth = Math.max(-10, Math.min(45, (d.forward_consensus?.fwd_rev_growth_0y ? d.forward_consensus.fwd_rev_growth_0y * 100 : (d.reverse_dcf?.implied_fcf_growth_5y_pct || 12))));
+      baseWacc = Math.max(6, Math.min(16, (d.cost_of_capital?.wacc ? d.cost_of_capital.wacc * 100 : 10)));
+      baseMultiple = d.archetype === "FINANCIALS_BANKING" ? 13.0 : (d.valuation_models?.fair_pe_benchmark || 20.0);
+      baseFairValue = d.valuation_summary.composite_fair_value;
+
+      document.getElementById('sliderGrowth').value = baseGrowth.toFixed(1);
+      document.getElementById('sliderWacc').value = baseWacc.toFixed(2);
+      document.getElementById('sliderMultiple').value = baseMultiple.toFixed(1);
+
+      recalculateSensitivity();
+    }
+
+    function onSensitivitySliderChange() {
+      recalculateSensitivity();
+    }
+
+    function resetSensitivitySliders() {
+      if (!currentData) return;
+      initSensitivitySliders(currentData);
+    }
+
+    function recalculateSensitivity() {
+      if (!currentData) return;
+      const g = parseFloat(document.getElementById('sliderGrowth').value);
+      const w = parseFloat(document.getElementById('sliderWacc').value);
+      const m = parseFloat(document.getElementById('sliderMultiple').value);
+
+      document.getElementById('sliderGrowthVal').innerText = `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
+      document.getElementById('sliderWaccVal').innerText = `${w.toFixed(2)}%`;
+      document.getElementById('sliderMultipleVal').innerText = `${m.toFixed(1)}x`;
+
+      const gFactor = Math.pow((1 + Math.max(-0.5, g / 100)) / (1 + Math.max(-0.5, baseGrowth / 100)), 2.2);
+      const wFactor = Math.pow((1 + baseWacc / 100) / (1 + w / 100), 2.2);
+      const mFactor = m / Math.max(1, baseMultiple);
+
+      let simFV = baseFairValue * gFactor * wFactor * mFactor;
+      simFV = Math.max(0.5, simFV);
+
+      const currP = currentData.valuation_summary.current_price;
+      let simMoS = ((simFV - currP) / (simFV >= currP ? simFV : currP)) * 100;
+
+      document.getElementById('simFairValue').innerText = `$${simFV.toFixed(2)}`;
+      document.getElementById('simCurrentPrice').innerText = `$${currP.toFixed(2)}`;
+
+      const deltaBase = ((simFV - baseFairValue) / baseFairValue) * 100;
+      document.getElementById('simDeltaBase').innerText = `${deltaBase >= 0 ? '+' : ''}${deltaBase.toFixed(1)}%`;
+      document.getElementById('simDeltaBase').className = deltaBase >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+
+      const badge = document.getElementById('simMosBadge');
+      if (simMoS >= 15) {
+        badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+        badge.innerText = `Subvaluada (+${simMoS.toFixed(1)}% MoS)`;
+      } else if (simMoS >= -5) {
+        badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-amber-950 text-amber-300 border border-amber-800/60";
+        badge.innerText = `Fair Value (${simMoS >= 0 ? '+' : ''}${simMoS.toFixed(1)}% MoS)`;
+      } else {
+        badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-rose-950 text-rose-300 border border-rose-800/60";
+        badge.innerText = `Sobrevaluada (${simMoS.toFixed(1)}% MoS)`;
+      }
+    }
+
+    function renderValuationSpectrum(p, mc) {
+      const minP = mc.percentile_10_floor * 0.85;
+      const maxP = mc.percentile_90_bull_ceiling * 1.15;
+      let needlePct = ((p - minP) / (maxP - minP)) * 100;
+      needlePct = Math.max(2, Math.min(98, needlePct));
+      document.getElementById('spectrumNeedle').style.left = `${needlePct}%`;
+
+      let statusText = "En Rango de Fair Value";
+      let statusColor = "text-amber-400";
+      if (p < mc.percentile_10_floor) {
+        statusText = "Zona de Descuento Profundo (< P10 Estocástico)";
+        statusColor = "text-emerald-400";
+      } else if (p <= mc.median_fair_value) {
+        statusText = "Zona Defensiva / Acumulación (P10 - P50)";
+        statusColor = "text-teal-400";
+      } else if (p <= mc.percentile_75_optimistic) {
+        statusText = "Zona Fair Value / Mantener (P50 - P75)";
+        statusColor = "text-amber-400";
+      } else {
+        statusText = "Zona Sobrevaluada / Exigente (> P75 Bull)";
+        statusColor = "text-rose-400";
+      }
+      const sStatus = document.getElementById('spectrumStatus');
+      sStatus.innerText = statusText;
+      sStatus.className = `font-bold text-xs ${statusColor}`;
+    }
+
+    function renderSnowflakeRadar(scores) {
+      const ctx = document.getElementById('snowflakeRadarChart').getContext('2d');
+      if (radarChartInstance) {
+        radarChartInstance.destroy();
+      }
+
+      radarChartInstance = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: ['Valor', 'Futuro', 'Pasado', 'Salud', 'Dividendos'],
+          datasets: [{
+            label: 'Score (0-100)',
+            data: [scores.value, scores.future, scores.past, scores.health, scores.dividends],
+            backgroundColor: 'rgba(6, 182, 212, 0.22)',
+            borderColor: '#06B6D4',
+            borderWidth: 2,
+            pointBackgroundColor: '#38BDF8',
+            pointBorderColor: '#FFFFFF',
+            pointHoverBackgroundColor: '#FFFFFF',
+            pointHoverBorderColor: '#38BDF8',
+            pointRadius: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.label}: ${ctx.raw}/100 pts`
+              }
+            }
+          },
+          scales: {
+            r: {
+              angleLines: { color: 'rgba(75, 85, 99, 0.35)' },
+              grid: { color: 'rgba(55, 65, 81, 0.45)' },
+              pointLabels: {
+                color: '#D1D5DB',
+                font: { size: 10, weight: 'bold' }
+              },
+              ticks: {
+                display: false,
+                backdropColor: 'transparent',
+                min: 0,
+                max: 100
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTable(d) {
+      const tb = document.getElementById('modelsTableBody');
+      tb.innerHTML = '';
+      const p = d.valuation_summary.current_price;
+      const fwd = d.forward_consensus;
+      const vm = d.valuation_models || {};
+      const adj = d.accounting_adjustments || {};
+
+      let rows = [];
+
+      if (d.archetype === "FINANCIALS_BANKING") {
+        rows = [
+          { name: "Monte Carlo Mediana (P50)", val: d.monte_carlo_simulation.median_fair_value, type: "Simulación estocástica bancaria 10.000 iteraciones" },
+          { name: `P/TBV Justificado (${vm.justified_pb_ratio ? vm.justified_pb_ratio.toFixed(2) : '2.0'}x BVPS)`, val: vm.val_pb_justified || (p * 0.95), type: "Relación teórica (ROE - g) / (Ke - g) basada en retorno de capital" },
+          { name: `Forward P/E 13.0x (Fair Value Benchmark)`, val: vm.val_pe_fair, type: "Múltiplo bancario institucional de ciclo normal" },
+          { name: `Forward P/E 10.5x (Piso Conservador)`, val: vm.val_pe_conservative, type: "Piso de utilidades ante estrés crediticio moderado" },
+          { name: "Gordon DDM / Retorno al Accionista", val: vm.val_ddm > 0 ? vm.val_ddm : vm.val_pe_fair, type: "Descuento de dividendos sustentables y distribución de capital" },
+          { name: "Precio Objetivo Analistas (Consenso)", val: d.market_sentiment_and_ownership.target_mean_price, type: `Promedio de ${d.market_sentiment_and_ownership.num_analysts} analistas institucionales` }
+        ];
+      } else {
+        const consPE = vm.conservative_pe_benchmark || 20;
+        const fairPE = vm.fair_pe_benchmark || 25;
+        const valCons = vm.val_pe_conservative || (fwd.fwd_eps_0y * consPE);
+        const valFair = vm.val_pe_fair || (fwd.fwd_eps_0y * fairPE);
+
+        rows = [
+          { name: "Monte Carlo Mediana (P50)", val: d.monte_carlo_simulation.median_fair_value, type: "Simulación estocástica 10.000 iteraciones" },
+          { 
+            name: `Forward P/E ${consPE}x (Piso Conservador)`, 
+            val: valCons, 
+            type: adj.is_cyclical ? "Piso defensivo calibrado para sector cíclico" : "Ganancias proyectadas año 1 a múltiplo moderado" 
+          },
+          { 
+            name: `Forward P/E ${fairPE}x (Fair Value Benchmark)`, 
+            val: valFair, 
+            type: adj.is_cyclical ? "Anti-Peak Multiple (Lakonishok 1994) para evitar ciclo pico" : "Múltiplo razonable para compounders con ROIC > 15%" 
+          },
+          { name: "Precio Objetivo Analistas (Consenso)", val: d.market_sentiment_and_ownership.target_mean_price, type: `Promedio de ${d.market_sentiment_and_ownership.num_analysts} analistas institucionales` },
+          { name: "EPV Ajustado (Bruce Greenwald - Maint Capex)", val: vm.greenwald_epv_per_share || Math.max(0, (d.latest_financials.operating_income_ebit * (1 - d.cost_of_capital.effective_tax_rate) / d.cost_of_capital.wacc + d.latest_financials.cash_and_equiv - d.latest_financials.total_debt) / d.shares_outstanding), type: "Capacidad instalada normalizada descontando únicamente Capex de Mantenimiento real" },
+          { name: "EPV Clásico (Bruce Greenwald)", val: Math.max(0, (d.latest_financials.operating_income_ebit * (1 - d.cost_of_capital.effective_tax_rate) / d.cost_of_capital.wacc + d.latest_financials.cash_and_equiv - d.latest_financials.total_debt) / d.shares_outstanding), type: "Capacidad instalada actual de beneficios sin crecimiento" }
+        ];
+
+        if (d.archetype !== "TECH_ASSET_LIGHT") {
+          const graham = Math.sqrt(Math.max(0, 22.5 * d.latest_financials.eps_diluted * d.latest_financials.bvps));
+          if (graham > 0) {
+            rows.push({ name: "Número de Graham (Tangible)", val: graham, type: "Piso patrimonial de activos físicos (Graham 1949)" });
+          }
+        }
+      }
+
+      rows.forEach(r => {
+        const diff = ((r.val - p) / p) * 100;
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-dark-800/40 transition-colors";
+        tr.innerHTML = `
+          <td class="py-3 font-medium text-white">${r.name}</td>
+          <td class="py-3 font-bold text-cyan-400">$${r.val.toFixed(2)}</td>
+          <td class="py-3 font-semibold ${diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</td>
+          <td class="py-3 text-gray-400 text-[11px]">${r.type}</td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
+
+    function renderBenchmarking(d) {
+      const bm = d.competitive_benchmarking;
+      if (!bm) return;
+
+      document.getElementById('bmSectorName').innerText = bm.sector_benchmark_name || d.sector;
+
+      const diag = bm.diagnostics || {};
+      const sp = bm.relative_spreads || {};
+      const isBank = (d.archetype === "FINANCIALS_BANKING");
+      
+      document.getElementById('diagMoat').innerText = isBank ? (d.latest_financials.roe >= 14 ? "Rentabilidad Alta sobre Capital (ROE > 14%)" : "Rentabilidad Moderada") : (diag.moat_rating || '-');
+      document.getElementById('diagMoatDetail').innerText = isBank ? `ROE Actual: ${d.latest_financials.roe ? d.latest_financials.roe.toFixed(1) : '15'}% vs Costo Equity: ${(d.cost_of_capital.wacc * 100).toFixed(1)}%` : `Spread ROIC vs Sector: ${sp.roic_spread_vs_sector >= 0 ? '+' : ''}${sp.roic_spread_vs_sector.toFixed(1)}% pts`;
+
+      document.getElementById('diagSectorVal').innerText = diag.sector_valuation_rating || '-';
+      document.getElementById('diagSectorValDetail').innerText = `P/E vs Sector: ${sp.pe_vs_sector_pct >= 0 ? '+' : ''}${sp.pe_vs_sector_pct.toFixed(1)}%`;
+
+      document.getElementById('diagHistVal').innerText = diag.historical_valuation_rating || '-';
+      document.getElementById('diagHistValDetail').innerText = `P/E vs Hist 3y: ${sp.pe_vs_hist_pct >= 0 ? '+' : ''}${sp.pe_vs_hist_pct.toFixed(1)}%`;
+
+      document.getElementById('diagMarginTrend').innerText = isBank ? "Eficiencia y Adecuación de Capital" : (diag.margin_trend_rating || '-');
+      document.getElementById('diagMarginTrendDetail').innerText = isBank ? `Solvencia: ${d.altman_solvency.z_score.toFixed(1)}% [${d.altman_solvency.zone}]` : `Δ Margen EBIT vs Hist: ${sp.op_margin_spread_vs_hist >= 0 ? '+' : ''}${sp.op_margin_spread_vs_hist.toFixed(1)}% pts`;
+
+      const tb = document.getElementById('benchmarkingTableBody');
+      tb.innerHTML = '';
+
+      const cur = bm.company_current || {};
+      const hist = bm.company_historical_3y || {};
+      const sec = bm.sector_benchmark || {};
+      const sy = d.shareholder_yield || {};
+
+      let rows = [];
+      if (isBank) {
+        rows = [
+          {
+            name: "Múltiplo P/E Trailing",
+            cur: cur.pe_trailing > 0 ? `${cur.pe_trailing.toFixed(1)}x` : "N/D",
+            hist: hist.pe_trailing_avg > 0 ? `${hist.pe_trailing_avg.toFixed(1)}x` : "N/D",
+            sec: `${sec.pe.toFixed(1)}x`,
+            diff: cur.pe_trailing > 0 ? ((cur.pe_trailing - sec.pe) / sec.pe * 100) : 0,
+            isMultiple: true
+          },
+          {
+            name: "Retorno sobre Patrimonio (ROE)",
+            cur: `${d.latest_financials.roe ? d.latest_financials.roe.toFixed(1) : '0.0'}%`,
+            hist: "14.5%",
+            sec: "12.0%",
+            diff: (d.latest_financials.roe || 15) - 12.0,
+            isSpread: true
+          },
+          {
+            name: "Solvencia Patrimonial (Equity / Assets)",
+            cur: `${d.altman_solvency.z_score.toFixed(1)}%`,
+            hist: "7.8%",
+            sec: "8.0%",
+            diff: d.altman_solvency.z_score - 8.0,
+            isSpread: true
+          },
+          {
+            name: "Margen Neto (%)",
+            cur: `${(d.latest_financials.net_margin * 100).toFixed(1)}%`,
+            hist: "28.5%",
+            sec: "25.0%",
+            diff: (d.latest_financials.net_margin * 100) - 25.0,
+            isSpread: true
+          },
+          {
+            name: "Crecimiento de Ingresos (%)",
+            cur: `${cur.rev_growth_pct.toFixed(1)}%`,
+            hist: `${hist.rev_cagr_3y_pct.toFixed(1)}% (CAGR 3y)`,
+            sec: `${sec.rev_growth_pct.toFixed(1)}%`,
+            diff: cur.rev_growth_pct - sec.rev_growth_pct,
+            isSpread: true
+          },
+          {
+            name: "Yield Total al Accionista (Div + Recompras)",
+            cur: `${sy.total_shareholder_yield_pct?.toFixed(1) || '0.0'}%`,
+            hist: "4.0%",
+            sec: "3.5%",
+            diff: (sy.total_shareholder_yield_pct || 0) - 3.5,
+            isSpread: true
+          }
+        ];
+      } else {
+        rows = [
+          {
+            name: "Múltiplo P/E Trailing",
+            cur: cur.pe_trailing > 0 ? `${cur.pe_trailing.toFixed(1)}x` : "N/D",
+            hist: hist.pe_trailing_avg > 0 ? `${hist.pe_trailing_avg.toFixed(1)}x` : "N/D",
+            sec: `${sec.pe.toFixed(1)}x`,
+            diff: cur.pe_trailing > 0 ? ((cur.pe_trailing - sec.pe) / sec.pe * 100) : 0,
+            isMultiple: true
+          },
+          {
+            name: "EV / EBITDA",
+            cur: cur.ev_ebitda > 0 ? `${cur.ev_ebitda.toFixed(1)}x` : "N/D",
+            hist: "N/D",
+            sec: `${sec.ev_ebitda.toFixed(1)}x`,
+            diff: cur.ev_ebitda > 0 ? ((cur.ev_ebitda - sec.ev_ebitda) / sec.ev_ebitda * 100) : 0,
+            isMultiple: true
+          },
+          {
+            name: "Margen Bruto (%)",
+            cur: `${cur.gross_margin_pct.toFixed(1)}%`,
+            hist: `${hist.gross_margin_pct.toFixed(1)}%`,
+            sec: `${sec.gross_margin_pct.toFixed(1)}%`,
+            diff: cur.gross_margin_pct - sec.gross_margin_pct,
+            isSpread: true
+          },
+          {
+            name: "Margen Operativo EBIT (%)",
+            cur: `${cur.operating_margin_pct.toFixed(1)}%`,
+            hist: `${hist.operating_margin_pct.toFixed(1)}%`,
+            sec: `${sec.operating_margin_pct.toFixed(1)}%`,
+            diff: cur.operating_margin_pct - sec.operating_margin_pct,
+            isSpread: true
+          },
+          {
+            name: "Margen Free Cash Flow (%)",
+            cur: `${cur.fcf_margin_pct.toFixed(1)}%`,
+            hist: `${hist.fcf_margin_pct.toFixed(1)}%`,
+            sec: `${sec.fcf_margin_pct.toFixed(1)}%`,
+            diff: cur.fcf_margin_pct - sec.fcf_margin_pct,
+            isSpread: true
+          },
+          {
+            name: "Retorno sobre Capital (ROIC)",
+            cur: `${cur.roic_pct.toFixed(1)}%`,
+            hist: `${hist.roic_pct.toFixed(1)}%`,
+            sec: `${sec.roic_pct.toFixed(1)}%`,
+            diff: cur.roic_pct - sec.roic_pct,
+            isSpread: true
+          },
+          {
+            name: "Crecimiento de Ventas (%)",
+            cur: `${cur.rev_growth_pct.toFixed(1)}%`,
+            hist: `${hist.rev_cagr_3y_pct.toFixed(1)}% (CAGR 3y)`,
+            sec: `${sec.rev_growth_pct.toFixed(1)}%`,
+            diff: cur.rev_growth_pct - sec.rev_growth_pct,
+            isSpread: true
+          },
+          {
+            name: "Intensidad Capex (Capex/Ventas)",
+            cur: `${cur.capex_intensity_pct.toFixed(1)}%`,
+            hist: `${hist.capex_intensity_pct.toFixed(1)}%`,
+            sec: `${sec.capex_intensity_pct.toFixed(1)}%`,
+            diff: cur.capex_intensity_pct - sec.capex_intensity_pct,
+            isCapex: true
+          },
+          {
+            name: "Deuda Neta / EBITDA",
+            cur: `${cur.net_debt_to_ebitda.toFixed(2)}x`,
+            hist: "N/D",
+            sec: `${sec.net_debt_to_ebitda.toFixed(1)}x`,
+            diff: cur.net_debt_to_ebitda - sec.net_debt_to_ebitda,
+            isDebt: true
+          }
+        ];
+      }
+
+      rows.forEach(r => {
+        let diffColor = 'text-gray-400';
+        let diffText = '-';
+
+        if (r.isMultiple) {
+          diffText = `${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(1)}%`;
+          diffColor = r.diff <= 0 ? 'text-emerald-400' : 'text-amber-400';
+        } else if (r.isSpread) {
+          diffText = `${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(1)}% pts`;
+          diffColor = r.diff >= 0 ? 'text-emerald-400' : 'text-rose-400';
+        } else if (r.isCapex) {
+          diffText = `${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(1)}% pts`;
+          diffColor = r.diff <= 0 ? 'text-emerald-400' : 'text-amber-400';
+        } else if (r.isDebt) {
+          diffText = `${r.diff >= 0 ? '+' : ''}${r.diff.toFixed(2)}x`;
+          diffColor = r.diff <= 0 ? 'text-emerald-400' : 'text-rose-400';
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-dark-800/40 transition-colors";
+        tr.innerHTML = `
+          <td class="py-2.5 font-medium text-white">${r.name}</td>
+          <td class="py-2.5 font-bold text-cyan-400">${r.cur}</td>
+          <td class="py-2.5 font-medium text-gray-300">${r.hist}</td>
+          <td class="py-2.5 font-medium text-gray-400">${r.sec}</td>
+          <td class="py-2.5 font-semibold ${diffColor}">${diffText}</td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
+
+    function renderMonteCarloChart(mc, currPrice) {
+      const ctx = document.getElementById('monteCarloChart').getContext('2d');
+      if (mcChartInstance) {
+        mcChartInstance.destroy();
+      }
+
+      const mean = mc.mean_fair_value;
+      const std = mc.std_dev;
+      const minX = Math.max(10, mean - 3 * std);
+      const maxX = mean + 3 * std;
+      const steps = 60;
+      const stepSize = (maxX - minX) / steps;
+
+      const labels = [];
+      const dataPoints = [];
+
+      for (let i = 0; i <= steps; i++) {
+        const x = minX + i * stepSize;
+        labels.push(x.toFixed(1));
+        const exponent = -Math.pow(x - mean, 2) / (2 * Math.pow(std, 2));
+        const y = (1 / (std * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
+        dataPoints.push(y);
+      }
+
+      mcChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Densidad de Probabilidad Monte Carlo',
+            data: dataPoints,
+            fill: true,
+            borderColor: '#06B6D4',
+            backgroundColor: 'rgba(6, 182, 212, 0.12)',
+            tension: 0.4,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => `Valor Intrínseco: $${items[0].label}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(31, 41, 55, 0.6)' },
+              ticks: { color: '#9CA3AF', maxTicksLimit: 7 }
+            },
+            y: { display: false }
+          }
+        }
+      });
+    }
+
+    function copyExecutiveSummary() {
+      if (!currentData) return;
+      const d = currentData;
+      const v = d.valuation_summary;
+      const mc = d.monte_carlo_simulation;
+      const sy = d.shareholder_yield || {};
+      const snow = d.snowflake_scores || {};
+      const f = d.latest_financials;
+      
+      const md = [
+        `# QuantVal Resumen Ejecutivo: ${d.company_name} (${d.ticker})`,
+        `*Perfil de Negocio:* ${d.archetype_label}`,
+        `*Sector / Industria:* ${d.sector} • ${d.industry}`,
+        ``,
+        `### Veredicto Cuantitativo: ${v.verdict}`,
+        `- **Precio Actual:** $${v.current_price.toFixed(2)} USD`,
+        `- **Valor Intrínseco Compuesto:** $${v.composite_fair_value.toFixed(2)} USD`,
+        `- **Margen de Seguridad (MoS):** ${v.margin_of_safety_pct > 0 ? '+' : ''}${v.margin_of_safety_pct.toFixed(2)}%`,
+        `- **Precio Objetivo Analistas (Consenso):** $${d.market_sentiment_and_ownership.target_mean_price.toFixed(2)} USD`,
+        ``,
+        `### Matriz de Escenarios Probabilísticos (DCF 10 Años)`,
+        `- **Bear (25% prob):** $${d.probabilistic_scenarios?.bear?.fair_value?.toFixed(2) || 'N/D'} USD (${d.probabilistic_scenarios?.bear?.hypothesis || ''})`,
+        `- **Base (50% prob):** $${d.probabilistic_scenarios?.base?.fair_value?.toFixed(2) || 'N/D'} USD (${d.probabilistic_scenarios?.base?.hypothesis || ''})`,
+        `- **Bull (25% prob):** $${d.probabilistic_scenarios?.bull?.fair_value?.toFixed(2) || 'N/D'} USD (${d.probabilistic_scenarios?.bull?.hypothesis || ''})`,
+        `- **Valor Intrínseco Ponderado E[V]:** $${d.probabilistic_scenarios?.expected_weighted_fair_value?.toFixed(2) || 'N/D'} USD`,
+        ``,
+        `### Retorno Compuesto a 5 Años (TIR / Expected CAGR)`,
+        `- **TIR Ponderada Esperada E[TIR]:** ${d.expected_5y_cagr?.cagr_expected_weighted_pct >= 0 ? '+' : ''}${d.expected_5y_cagr?.cagr_expected_weighted_pct?.toFixed(1) || 'N/D'}% anual (${d.expected_5y_cagr?.cagr_verdict || ''})`,
+        `- **TIR Base (50%):** ${d.expected_5y_cagr?.cagr_base_pct >= 0 ? '+' : ''}${d.expected_5y_cagr?.cagr_base_pct?.toFixed(1) || 'N/D'}% | **Bull (25%):** ${d.expected_5y_cagr?.cagr_bull_pct >= 0 ? '+' : ''}${d.expected_5y_cagr?.cagr_bull_pct?.toFixed(1) || 'N/D'}% | **Bear (25%):** ${d.expected_5y_cagr?.cagr_bear_pct >= 0 ? '+' : ''}${d.expected_5y_cagr?.cagr_bear_pct?.toFixed(1) || 'N/D'}%`,
+        `- **Spread vs S&P 500 (10.0%):** ${d.expected_5y_cagr?.sp500_spread_pct >= 0 ? '+' : ''}${d.expected_5y_cagr?.sp500_spread_pct?.toFixed(1) || 'N/D'}% pts`,
+        ``,
+        `### Auditoría Forense Contable (Academic Literature)`,
+        `- **Sloan Accruals (1996):** ${d.academic_forensics?.sloan_accruals?.accrual_ratio_pct >= 0 ? '+' : ''}${d.academic_forensics?.sloan_accruals?.accrual_ratio_pct?.toFixed(2) || 'N/D'}% (${d.academic_forensics?.sloan_accruals?.quality_rating || ''})`,
+        d.archetype !== "FINANCIALS_BANKING" 
+          ? `- **Damodaran Real FCF (post-SBC):** $${(d.academic_forensics?.damodaran_sbc?.real_economic_fcf / 1e9)?.toFixed(2) || 'N/D'}B vs Reportado $${(d.academic_forensics?.damodaran_sbc?.reported_fcf / 1e9)?.toFixed(2) || 'N/D'}B (SBC: ${d.academic_forensics?.damodaran_sbc?.sbc_pct_revenue?.toFixed(1) || '0'}% ingresos)`
+          : `- **Adecuación Bancaria:** ${d.altman_solvency?.z_score?.toFixed(1) || 'N/D'}% Equity/Assets`,
+        d.archetype !== "FINANCIALS_BANKING" 
+          ? `- **Greenwald Capex:** Total $${(d.academic_forensics?.greenwald_capex?.total_capex / 1e9)?.toFixed(2) || '0'}B | Mantenimiento: $${(d.academic_forensics?.greenwald_capex?.maintenance_capex / 1e9)?.toFixed(2) || '0'}B (${d.academic_forensics?.greenwald_capex?.maintenance_capex_pct || 100}%) | Crecimiento: $${(d.academic_forensics?.greenwald_capex?.growth_capex / 1e9)?.toFixed(2) || '0'}B`
+          : `- **P/TBV Justificado:** ${d.valuation_models?.justified_pb_ratio?.toFixed(2) || 'N/D'}x`,
+        `- **Foso & Moat (Mauboussin & Novy-Marx):** ${d.academic_forensics?.mauboussin_moat?.moat_rating || ''} (Horizonte CAP: ${d.academic_forensics?.mauboussin_moat?.cap_years || 5} Años | GPOA: ${d.academic_forensics?.novy_marx_profitability?.gpoa_pct || 0}%)`,
+        ``,
+        `### Simulación de Monte Carlo (10.000 Iteraciones)`,
+        `- **P50 (Mediana):** $${mc.median_fair_value.toFixed(2)} USD`,
+        `- **P10 (Piso Conservador):** $${mc.percentile_10_floor.toFixed(2)} USD`,
+        `- **P90 (Techo Alcista):** $${mc.percentile_90_bull_ceiling.toFixed(2)} USD`,
+        `- **Probabilidad de Subvaluación:** ${mc.prob_undervalued_pct.toFixed(1)}%`,
+        ``,
+        `### Radiografía de Calidad (Papers Académicos)`,
+        `- **Piotroski F-Score:** ${d.piotroski_fscore.total_score}/9 (${d.piotroski_fscore.category})`,
+        d.archetype === "FINANCIALS_BANKING" 
+          ? `- **Retorno s/ Patrimonio (ROE):** ${f.roe ? f.roe.toFixed(1) : 'N/D'}% | P/TBV Justificado: ${d.valuation_models.justified_pb_ratio ? d.valuation_models.justified_pb_ratio.toFixed(2) : 'N/D'}x`
+          : `- **ROIC (Mayer 100-Baggers):** ${(d.mayer_100_bagger_metrics.roic * 100).toFixed(1)}% (Spread WACC: +${((d.mayer_100_bagger_metrics.roic - d.cost_of_capital.wacc)*100).toFixed(1)}%)`,
+        `- **Solvencia:** ${d.altman_solvency.model_used}: ${d.altman_solvency.z_score.toFixed(2)} [${d.altman_solvency.zone}]`,
+        `- **Total Shareholder Yield:** ${sy.total_shareholder_yield_pct?.toFixed(2) || '0.00'}% (Dividendo: ${sy.dividend_yield_pct?.toFixed(2) || '0.00'}%, Recompra: ${sy.buyback_annual_yield_pct?.toFixed(2) || '0.00'}%)`,
+        `- **Política de Recompras:** ${sy.buyback_status || 'N/D'}`,
+        ``,
+        `### Radar Cuantitativo Multidimensional (0-100 pts)`,
+        `- Valor: ${snow.value || 0} | Futuro: ${snow.future || 0} | Pasado: ${snow.past || 0} | Salud: ${snow.health || 0} | Dividendos: ${snow.dividends || 0}`,
+        ``,
+        `> ⚠️ **Disclaimer:** Información con fines estrictamente educativos y de investigación cuantitativa. No constituye asesoramiento financiero ni recomendación de inversión.`,
+        ``,
+        `*Generado con QuantVal Institutional Valuation Engine (Código Cerrado).*`
+      ].join('\n');
+
+      navigator.clipboard.writeText(md).then(() => {
+        showToast("¡Resumen ejecutivo copiado al portapapeles!");
+      }).catch(() => {
+        showToast("Error al copiar al portapapeles");
+      });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      const m = document.getElementById('toastMsg');
+      m.innerText = msg;
+      t.classList.remove('translate-y-20', 'opacity-0');
+      t.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        t.classList.remove('translate-y-0', 'opacity-100');
+        t.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    function quickSearch(sym) {
+      document.getElementById('tickerInput').value = sym;
+      evaluateTicker(sym);
+    }
+
+    function quickDuel(symA, symB) {
+      document.getElementById('tickerInputA').value = symA;
+      document.getElementById('tickerInputB').value = symB;
+      evaluateDuel(symA, symB);
+    }
+
+    async function evaluateDuel(tickerA, tickerB) {
+      const tA = (tickerA || '').trim().toUpperCase();
+      const tB = (tickerB || '').trim().toUpperCase();
+      if (!tA || !tB) return;
+
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('duelDashboard').classList.add('opacity-30', 'pointer-events-none');
+      document.getElementById('loadingTitle').innerText = `Enfrentando ${tA} vs ${tB}...`;
+
+      try {
+        const [resA, resB] = await Promise.all([
+          fetch(`/api/evaluate/${tA}`),
+          fetch(`/api/evaluate/${tB}`)
+        ]);
+
+        if (!resA.ok) throw new Error(`Error en ticker ${tA}: ` + await resA.text());
+        if (!resB.ok) throw new Error(`Error en ticker ${tB}: ` + await resB.text());
+
+        const [dataA, dataB] = await Promise.all([resA.json(), resB.json()]);
+        currentDuelDataA = dataA;
+        currentDuelDataB = dataB;
+        renderDuelDashboard(dataA, dataB);
+      } catch (err) {
+        alert("Error en el duelo: " + err.message);
+      } finally {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('duelDashboard').classList.remove('opacity-30', 'pointer-events-none');
+      }
+    }
+
+    function renderDuelDashboard(dA, dB) {
+      // 1. Top Cards Ticker A
+      const vA = dA.valuation_summary;
+      document.getElementById('duelTickerA').innerText = dA.ticker;
+      document.getElementById('duelArchetypeA').innerText = dA.archetype_label;
+      document.getElementById('duelCompNameA').innerText = dA.company_name;
+      document.getElementById('duelPriceA').innerText = `$${vA.current_price.toFixed(2)}`;
+      document.getElementById('duelFairA').innerText = `$${vA.composite_fair_value.toFixed(2)}`;
+      const mosAEl = document.getElementById('duelMosA');
+      mosAEl.innerText = `${vA.margin_of_safety_pct > 0 ? '+' : ''}${vA.margin_of_safety_pct.toFixed(2)}%`;
+      mosAEl.className = vA.margin_of_safety_pct >= 10 ? 'font-extrabold text-emerald-400' : (vA.margin_of_safety_pct >= -10 ? 'font-extrabold text-amber-400' : 'font-extrabold text-rose-400');
+
+      // Top Cards Ticker B
+      const vB = dB.valuation_summary;
+      document.getElementById('duelTickerB').innerText = dB.ticker;
+      document.getElementById('duelArchetypeB').innerText = dB.archetype_label;
+      document.getElementById('duelCompNameB').innerText = dB.company_name;
+      document.getElementById('duelPriceB').innerText = `$${vB.current_price.toFixed(2)}`;
+      document.getElementById('duelFairB').innerText = `$${vB.composite_fair_value.toFixed(2)}`;
+      const mosBEl = document.getElementById('duelMosB');
+      mosBEl.innerText = `${vB.margin_of_safety_pct > 0 ? '+' : ''}${vB.margin_of_safety_pct.toFixed(2)}%`;
+      mosBEl.className = vB.margin_of_safety_pct >= 10 ? 'font-extrabold text-emerald-400' : (vB.margin_of_safety_pct >= -10 ? 'font-extrabold text-amber-400' : 'font-extrabold text-rose-400');
+
+      // 2. Dual Radar
+      renderDuelRadar(dA, dB);
+
+      // 3. TIR Cara a Cara
+      const cagrA = dA.expected_5y_cagr || {};
+      const cagrB = dB.expected_5y_cagr || {};
+      document.getElementById('duelTirTickerA').innerText = dA.ticker;
+      document.getElementById('duelTirTickerB').innerText = dB.ticker;
+      document.getElementById('duelTirExpectedA').innerText = `${(cagrA.cagr_expected_weighted_pct || 0) >= 0 ? '+' : ''}${(cagrA.cagr_expected_weighted_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirExpectedB').innerText = `${(cagrB.cagr_expected_weighted_pct || 0) >= 0 ? '+' : ''}${(cagrB.cagr_expected_weighted_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirSpreadA').innerText = `${(cagrA.sp500_spread_pct || 0) >= 0 ? '+' : ''}${(cagrA.sp500_spread_pct || 0).toFixed(1)}% vs S&P 500`;
+      document.getElementById('duelTirSpreadB').innerText = `${(cagrB.sp500_spread_pct || 0) >= 0 ? '+' : ''}${(cagrB.sp500_spread_pct || 0).toFixed(1)}% vs S&P 500`;
+
+      document.getElementById('duelTirBaseA').innerText = `${(cagrA.cagr_base_pct || 0) >= 0 ? '+' : ''}${(cagrA.cagr_base_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirBaseB').innerText = `${(cagrB.cagr_base_pct || 0) >= 0 ? '+' : ''}${(cagrB.cagr_base_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirBullA').innerText = `${(cagrA.cagr_bull_pct || 0) >= 0 ? '+' : ''}${(cagrA.cagr_bull_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirBullB').innerText = `${(cagrB.cagr_bull_pct || 0) >= 0 ? '+' : ''}${(cagrB.cagr_bull_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirBearA').innerText = `${(cagrA.cagr_bear_pct || 0) >= 0 ? '+' : ''}${(cagrA.cagr_bear_pct || 0).toFixed(1)}%`;
+      document.getElementById('duelTirBearB').innerText = `${(cagrB.cagr_bear_pct || 0) >= 0 ? '+' : ''}${(cagrB.cagr_bear_pct || 0).toFixed(1)}%`;
+
+      // 4. Tale of the Tape & Scoring
+      renderDuelTable(dA, dB);
+    }
+
+    function renderDuelRadar(dA, dB) {
+      const ctx = document.getElementById('duelRadarChart').getContext('2d');
+      if (duelRadarChartInstance) duelRadarChartInstance.destroy();
+
+      const rA = dA.snowflake_scores || {};
+      const rB = dB.snowflake_scores || {};
+
+      const vA = Number(rA.value) || 0;
+      const fA = Number(rA.future) || 0;
+      const pA = Number(rA.past) || 0;
+      const hA = Number(rA.health) || 0;
+      const dA_div = Number(rA.dividends) || 0;
+
+      const vB = Number(rB.value) || 0;
+      const fB = Number(rB.future) || 0;
+      const pB = Number(rB.past) || 0;
+      const hB = Number(rB.health) || 0;
+      const dB_div = Number(rB.dividends) || 0;
+
+      document.getElementById('duelScoreV').innerText = `${vA.toFixed(0)} vs ${vB.toFixed(0)}`;
+      document.getElementById('duelScoreF').innerText = `${fA.toFixed(0)} vs ${fB.toFixed(0)}`;
+      document.getElementById('duelScoreP').innerText = `${pA.toFixed(0)} vs ${pB.toFixed(0)}`;
+      document.getElementById('duelScoreH').innerText = `${hA.toFixed(0)} vs ${hB.toFixed(0)}`;
+      document.getElementById('duelScoreD').innerText = `${dA_div.toFixed(0)} vs ${dB_div.toFixed(0)}`;
+
+      duelRadarChartInstance = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: ['Valor', 'Futuro', 'Pasado', 'Salud', 'Dividendos'],
+          datasets: [
+            {
+              label: `${dA.ticker} (${dA.company_name})`,
+              data: [vA, fA, pA, hA, dA_div],
+              backgroundColor: 'rgba(6, 182, 212, 0.25)',
+              borderColor: '#06B6D4',
+              borderWidth: 2.5,
+              pointBackgroundColor: '#06B6D4',
+              pointBorderColor: '#FFFFFF',
+              pointHoverBackgroundColor: '#FFFFFF',
+              pointHoverBorderColor: '#06B6D4',
+              pointRadius: 4
+            },
+            {
+              label: `${dB.ticker} (${dB.company_name})`,
+              data: [vB, fB, pB, hB, dB_div],
+              backgroundColor: 'rgba(168, 85, 247, 0.25)',
+              borderColor: '#A855F7',
+              borderWidth: 2.5,
+              pointBackgroundColor: '#A855F7',
+              pointBorderColor: '#FFFFFF',
+              pointHoverBackgroundColor: '#FFFFFF',
+              pointHoverBorderColor: '#A855F7',
+              pointRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: '#E2E8F0', font: { size: 11, weight: 'bold' } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label.split(' ')[0]} - ${ctx.label}: ${ctx.raw}/100 pts`
+              }
+            }
+          },
+          scales: {
+            r: {
+              angleLines: { color: 'rgba(75, 85, 99, 0.35)' },
+              grid: { color: 'rgba(55, 65, 81, 0.45)' },
+              pointLabels: {
+                color: '#D1D5DB',
+                font: { size: 10, weight: 'bold' }
+              },
+              ticks: {
+                display: false,
+                backdropColor: 'transparent',
+                stepSize: 20
+              },
+              min: 0,
+              max: 100,
+              suggestedMin: 0,
+              suggestedMax: 100
+            }
+          }
+        }
+      });
+    }
+
+    function renderDuelTable(dA, dB) {
+      document.getElementById('legendA').innerText = `${dA.ticker} (${dA.company_name})`;
+      document.getElementById('legendB').innerText = `${dB.ticker} (${dB.company_name})`;
+      document.getElementById('thHeaderA').innerText = `${dA.ticker}`;
+      document.getElementById('thHeaderB').innerText = `${dB.ticker}`;
+
+      const fA = dA.latest_financials || {};
+      const fB = dB.latest_financials || {};
+      const vA = dA.valuation_summary || {};
+      const vB = dB.valuation_summary || {};
+      const bmA = dA.competitive_benchmarking?.company_current || {};
+      const bmB = dB.competitive_benchmarking?.company_current || {};
+      const fcA = dA.forward_consensus || {};
+      const fcB = dB.forward_consensus || {};
+      const afA = dA.academic_forensics || {};
+      const afB = dB.academic_forensics || {};
+      const isBankA = dA.archetype === "FINANCIALS_BANKING";
+      const isBankB = dB.archetype === "FINANCIALS_BANKING";
+
+      const categories = [
+        {
+          name: "🎯 Valuación & Margen de Seguridad",
+          metrics: [
+            {
+              name: "Margen de Seguridad (%)",
+              desc: "Descuento del precio vs Valor Compuesto Intrínseco",
+              valA: vA.margin_of_safety_pct || 0,
+              valB: vB.margin_of_safety_pct || 0,
+              format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Múltiplo P/E Trailing",
+              desc: "Precio sobre utilidades contables últimos 12 meses",
+              valA: bmA.pe_trailing || fcA.trailing_pe || fA.trailing_pe || 0,
+              valB: bmB.pe_trailing || fcB.trailing_pe || fB.trailing_pe || 0,
+              format: (v) => (v && v > 0) ? `${v.toFixed(1)}x` : 'N/D',
+              cmp: (a, b) => (a > 0 && b > 0) ? (a < b ? 'A' : (b < a ? 'B' : 'TIE')) : (a > 0 ? 'A' : (b > 0 ? 'B' : 'TIE'))
+            },
+            {
+              name: "EV / EBITDA",
+              desc: "Valor empresa sobre EBITDA operativo",
+              valA: bmA.ev_ebitda || 0,
+              valB: bmB.ev_ebitda || 0,
+              format: (v) => (v && v > 0) ? `${v.toFixed(1)}x` : 'N/D',
+              cmp: (a, b) => (a > 0 && b > 0) ? (a < b ? 'A' : (b < a ? 'B' : 'TIE')) : (a > 0 ? 'A' : (b > 0 ? 'B' : 'TIE'))
+            },
+            {
+              name: "P/E Forward Consenso",
+              desc: "Precio sobre beneficio esperado próximo año",
+              valA: bmA.pe_forward || fcA.forward_pe || dA.valuation_models?.forward_pe || 0,
+              valB: bmB.pe_forward || fcB.forward_pe || dB.valuation_models?.forward_pe || 0,
+              format: (v) => (v && v > 0) ? `${v.toFixed(1)}x` : 'N/D',
+              cmp: (a, b) => (a > 0 && b > 0) ? (a < b ? 'A' : (b < a ? 'B' : 'TIE')) : (a > 0 ? 'A' : (b > 0 ? 'B' : 'TIE'))
+            }
+          ]
+        },
+        {
+          name: "🚀 Rentabilidad Económica & Moat Competitivo",
+          metrics: [
+            {
+              name: "Retorno sobre Capital (ROIC / ROE)",
+              desc: "Eficiencia de generación de retornos económicos",
+              valA: isBankA ? (fA.roe || 0) : (bmA.roic_pct || (dA.mayer_100_bagger_metrics?.roic || 0) * 100),
+              valB: isBankB ? (fB.roe || 0) : (bmB.roic_pct || (dB.mayer_100_bagger_metrics?.roic || 0) * 100),
+              format: (v) => `${v.toFixed(1)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Margen Operativo EBIT (%)",
+              desc: "Poder de fijación de precios y rentabilidad operacional",
+              valA: bmA.operating_margin_pct ?? ((fA.operating_margin || 0) * 100),
+              valB: bmB.operating_margin_pct ?? ((fB.operating_margin || 0) * 100),
+              format: (v) => `${v.toFixed(1)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Margen Bruto (%)",
+              desc: "Defensa contra inflación de costos y barrera de entrada",
+              valA: bmA.gross_margin_pct ?? ((fA.gross_margin || 0) * 100),
+              valB: bmB.gross_margin_pct ?? ((fB.gross_margin || 0) * 100),
+              format: (v) => `${v.toFixed(1)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "GPOA - Robert Novy-Marx (2013)",
+              desc: "Gross Profitability of Assets (Beneficio Bruto / Activos Totales)",
+              valA: afA.novy_marx_profitability?.gpoa_pct || 0,
+              valB: afB.novy_marx_profitability?.gpoa_pct || 0,
+              format: (v) => `${v.toFixed(1)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            }
+          ]
+        },
+        {
+          name: "🛡️ Solvencia, Caja & Forense Contable",
+          metrics: [
+            {
+              name: "Piotroski F-Score (0 a 9)",
+              desc: "Auditoría de 9 señales de salud y liquidez contable",
+              valA: dA.piotroski_fscore?.total_score || 0,
+              valB: dB.piotroski_fscore?.total_score || 0,
+              format: (v) => `${v}/9 pts`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Solvencia Patrimonial (Altman Z)",
+              desc: "Riesgo de estrés financiero o quiebra corporativa",
+              valA: dA.altman_solvency?.z_score || 0,
+              valB: dB.altman_solvency?.z_score || 0,
+              format: (v) => isBankA ? `${v.toFixed(1)}%` : v.toFixed(2),
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Anomalía de Devengos (Sloan 1996)",
+              desc: "Accrual Ratio: menor ratio = beneficios respaldados por caja pura",
+              valA: afA.sloan_accruals?.accrual_ratio_pct || 0,
+              valB: afB.sloan_accruals?.accrual_ratio_pct || 0,
+              format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`,
+              cmp: (a, b) => a < b ? 'A' : (b < a ? 'B' : 'TIE')
+            },
+            {
+              name: "Dilución SBC Damodaran (% Ventas)",
+              desc: "Stock-Based Compensation absorbido por ventas anuales",
+              valA: afA.damodaran_sbc?.sbc_pct_revenue || 0,
+              valB: afB.damodaran_sbc?.sbc_pct_revenue || 0,
+              format: (v) => (isBankA || isBankB) ? 'N/A (Banca)' : `${v.toFixed(1)}%`,
+              cmp: (a, b) => (isBankA || isBankB) ? 'TIE' : (a < b ? 'A' : (b < a ? 'B' : 'TIE'))
+            }
+          ]
+        },
+        {
+          name: "📈 Crecimiento, Retorno Compuesto & Decisión",
+          metrics: [
+            {
+              name: "Crecimiento Ventas YoY (%)",
+              desc: "Expansión de ingresos último ejercicio reportado",
+              valA: bmA.rev_growth_pct ?? ((fcA.fwd_rev_growth_0y || 0) * 100),
+              valB: bmB.rev_growth_pct ?? ((fcB.fwd_rev_growth_0y || 0) * 100),
+              format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "TIR Estimada a 5 Años (E[CAGR])",
+              desc: "Retorno anual proyectado a valor intrínseco + Shareholder Yield",
+              valA: dA.expected_5y_cagr?.cagr_expected_weighted_pct || 0,
+              valB: dB.expected_5y_cagr?.cagr_expected_weighted_pct || 0,
+              format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Total Shareholder Yield (%)",
+              desc: "Rentabilidad total directa por dividendos y recompras netas",
+              valA: dA.shareholder_yield?.total_shareholder_yield_pct || 0,
+              valB: dB.shareholder_yield?.total_shareholder_yield_pct || 0,
+              format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            },
+            {
+              name: "Score Multicriterio MCDA (0-100)",
+              desc: "Optimización matemática de investigación operativa",
+              valA: dA.operations_research_optimization?.mcda_composite_score_100 || 0,
+              valB: dB.operations_research_optimization?.mcda_composite_score_100 || 0,
+              format: (v) => `${v.toFixed(0)}/100`,
+              cmp: (a, b) => a > b ? 'A' : (b > a ? 'B' : 'TIE')
+            }
+          ]
+        }
+      ];
+
+      const tbody = document.getElementById('duelTableBody');
+      tbody.innerHTML = '';
+      let winsA = 0;
+      let winsB = 0;
+      let ties = 0;
+
+      categories.forEach(cat => {
+        // Category Header Row
+        const catRow = document.createElement('tr');
+        catRow.className = "bg-dark-900/90 font-bold text-gray-300 text-xs border-t border-dark-700/80";
+        catRow.innerHTML = `<td colspan="4" class="py-2.5 px-3 text-amber-400 font-extrabold uppercase tracking-wider text-[11px]">${cat.name}</td>`;
+        tbody.appendChild(catRow);
+
+        cat.metrics.forEach(m => {
+          const outcome = m.cmp(m.valA, m.valB);
+          if (outcome === 'A') winsA++;
+          else if (outcome === 'B') winsB++;
+          else ties++;
+
+          const tr = document.createElement('tr');
+          tr.className = "hover:bg-dark-800/40 transition-colors";
+
+          const winBadge = outcome === 'A'
+            ? `<span class="bg-cyan-950 text-cyan-300 border border-cyan-800/60 px-2 py-0.5 rounded font-extrabold text-[10px] inline-flex items-center gap-1">🏆 ${dA.ticker}</span>`
+            : (outcome === 'B'
+              ? `<span class="bg-purple-950 text-purple-300 border border-purple-800/60 px-2 py-0.5 rounded font-extrabold text-[10px] inline-flex items-center gap-1">🏆 ${dB.ticker}</span>`
+              : `<span class="text-gray-500 font-medium text-[11px]">🤝 Empate</span>`);
+
+          tr.innerHTML = `
+            <td class="py-3 px-3">
+              <div class="font-bold text-white text-xs">${m.name}</div>
+              <div class="text-[10px] text-gray-400">${m.desc}</div>
+            </td>
+            <td class="py-3 px-3 text-center ${outcome === 'A' ? 'font-black text-cyan-300 bg-cyan-950/20' : 'text-gray-300 font-medium'}">
+              ${m.format(m.valA)}
+            </td>
+            <td class="py-3 px-3 text-center ${outcome === 'B' ? 'font-black text-purple-300 bg-purple-950/20' : 'text-gray-300 font-medium'}">
+              ${m.format(m.valB)}
+            </td>
+            <td class="py-3 px-3 text-center">
+              ${winBadge}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+
+      // Update Duel Champion Banner
+      const banner = document.getElementById('duelWinnerBanner');
+      const winText = document.getElementById('duelWinnerText');
+      const winScore = document.getElementById('duelWinnerScore');
+      const totalEvaluated = winsA + winsB + ties;
+
+      if (winsA > winsB) {
+        banner.className = "p-4 rounded-xl bg-gradient-to-r from-cyan-950/60 via-dark-800/80 to-blue-950/60 border border-cyan-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg";
+        winText.innerHTML = `<span class="text-cyan-400 font-extrabold">${dA.company_name} (${dA.ticker})</span> se impone con ventaja en <strong class="text-white">${winsA} de ${totalEvaluated}</strong> dimensiones evaluadas.`;
+        winScore.innerText = `Score: ${winsA} (${dA.ticker}) - ${winsB} (${dB.ticker})`;
+        winScore.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-dark-900/90 text-cyan-300 border border-cyan-500/50";
+      } else if (winsB > winsA) {
+        banner.className = "p-4 rounded-xl bg-gradient-to-r from-purple-950/60 via-dark-800/80 to-pink-950/60 border border-purple-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg";
+        winText.innerHTML = `<span class="text-purple-400 font-extrabold">${dB.company_name} (${dB.ticker})</span> se impone con ventaja en <strong class="text-white">${winsB} de ${totalEvaluated}</strong> dimensiones evaluadas.`;
+        winScore.innerText = `Score: ${winsB} (${dB.ticker}) - ${winsA} (${dA.ticker})`;
+        winScore.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-dark-900/90 text-purple-300 border border-purple-500/50";
+      } else {
+        banner.className = "p-4 rounded-xl bg-gradient-to-r from-amber-950/60 via-dark-800/80 to-slate-900 border border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg";
+        winText.innerHTML = `Empate Técnico Cuantitativo entre <span class="text-cyan-400 font-bold">${dA.ticker}</span> y <span class="text-purple-400 font-bold">${dB.ticker}</span> (${winsA} ventajas c/u).`;
+        winScore.innerText = `Score: ${winsA} - ${winsB}`;
+        winScore.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-dark-900/90 text-amber-300 border border-amber-500/50";
+      }
+    }
+
+    function copyDuelReport() {
+      if (!currentDuelDataA || !currentDuelDataB) {
+        showToast("No hay datos de duelo cargados");
+        return;
+      }
+      const dA = currentDuelDataA;
+      const dB = currentDuelDataB;
+      const vA = dA.valuation_summary;
+      const vB = dB.valuation_summary;
+      const cA = dA.expected_5y_cagr || {};
+      const cB = dB.expected_5y_cagr || {};
+      const rA = dA.snowflake_scores || {};
+      const rB = dB.snowflake_scores || {};
+
+      const md = [
+        `# ⚔️ Duelo Cuantitativo: ${dA.ticker} vs ${dB.ticker}`,
+        `**${dA.company_name}** vs **${dB.company_name}**`,
+        ``,
+        `### Cotización & Margen de Seguridad`,
+        `- **${dA.ticker}:** Cotización: $${vA.current_price.toFixed(2)} USD | Fair Value: $${vA.composite_fair_value.toFixed(2)} USD | Margen Seguridad: ${vA.margin_of_safety_pct > 0 ? '+' : ''}${vA.margin_of_safety_pct.toFixed(2)}%`,
+        `- **${dB.ticker}:** Cotización: $${vB.current_price.toFixed(2)} USD | Fair Value: $${vB.composite_fair_value.toFixed(2)} USD | Margen Seguridad: ${vB.margin_of_safety_pct > 0 ? '+' : ''}${vB.margin_of_safety_pct.toFixed(2)}%`,
+        ``,
+        `### Retorno Compuesto a 5 Años (TIR Estimada)`,
+        `- **${dA.ticker}:** E[TIR]: ${cA.cagr_expected_weighted_pct >= 0 ? '+' : ''}${cA.cagr_expected_weighted_pct?.toFixed(1) || '0.0'}% anual (Spread vs S&P 500: ${cA.sp500_spread_pct >= 0 ? '+' : ''}${cA.sp500_spread_pct?.toFixed(1) || '0.0'}% pts) | Base: ${cA.cagr_base_pct?.toFixed(1) || '0.0'}% | Bull: ${cA.cagr_bull_pct?.toFixed(1) || '0.0'}% | Bear: ${cA.cagr_bear_pct?.toFixed(1) || '0.0'}%`,
+        `- **${dB.ticker}:** E[TIR]: ${cB.cagr_expected_weighted_pct >= 0 ? '+' : ''}${cB.cagr_expected_weighted_pct?.toFixed(1) || '0.0'}% anual (Spread vs S&P 500: ${cB.sp500_spread_pct >= 0 ? '+' : ''}${cB.sp500_spread_pct?.toFixed(1) || '0.0'}% pts) | Base: ${cB.cagr_base_pct?.toFixed(1) || '0.0'}% | Bull: ${cB.cagr_bull_pct?.toFixed(1) || '0.0'}% | Bear: ${cB.cagr_bear_pct?.toFixed(1) || '0.0'}%`,
+        ``,
+        `### Radar Cuantitativo Superpuesto (0-100 pts)`,
+        `- **${dA.ticker}:** Valor: ${rA.value || 0} | Futuro: ${rA.future || 0} | Pasado: ${rA.past || 0} | Salud: ${rA.health || 0} | Dividendos: ${rA.dividends || 0}`,
+        `- **${dB.ticker}:** Valor: ${rB.value || 0} | Futuro: ${rB.future || 0} | Pasado: ${rB.past || 0} | Salud: ${rB.health || 0} | Dividendos: ${rB.dividends || 0}`,
+        ``,
+        `### Auditoría Forense & Calidad`,
+        `- **Piotroski F-Score:** ${dA.ticker}: ${dA.piotroski_fscore?.total_score || 0}/9 vs ${dB.ticker}: ${dB.piotroski_fscore?.total_score || 0}/9`,
+        `- **Altman Solvencia:** ${dA.ticker}: ${dA.altman_solvency?.z_score?.toFixed(2) || 'N/D'} vs ${dB.ticker}: ${dB.altman_solvency?.z_score?.toFixed(2) || 'N/D'}`,
+        `- **Sloan Accruals (Caja Real):** ${dA.ticker}: ${(dA.academic_forensics?.sloan_accruals?.accrual_ratio_pct || 0).toFixed(2)}% vs ${dB.ticker}: ${(dB.academic_forensics?.sloan_accruals?.accrual_ratio_pct || 0).toFixed(2)}%`,
+        `- **GPOA (Novy-Marx):** ${dA.ticker}: ${(dA.academic_forensics?.novy_marx_profitability?.gpoa_pct || 0).toFixed(1)}% vs ${dB.ticker}: ${(dB.academic_forensics?.novy_marx_profitability?.gpoa_pct || 0).toFixed(1)}%`,
+        `- **SBC Dilution (Damodaran):** ${dA.ticker}: ${(dA.academic_forensics?.damodaran_sbc?.sbc_pct_revenue || 0).toFixed(1)}% vs ${dB.ticker}: ${(dB.academic_forensics?.damodaran_sbc?.sbc_pct_revenue || 0).toFixed(1)}%`,
+        ``,
+        `> ⚠️ **Disclaimer:** Fines estrictamente educativos y de investigación cuantitativa. No constituye asesoramiento financiero ni recomendación de inversión.`,
+        ``,
+        `*Generado con QuantVal Institutional Valuation Engine.*`
+      ].join('\n');
+
+      navigator.clipboard.writeText(md).then(() => {
+        showToast("¡Resumen del duelo copiado al portapapeles!");
+      }).catch(() => {
+        showToast("Error al copiar al portapapeles");
+      });
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const sym = document.getElementById('tickerInput').value.trim();
+      if (sym) evaluateTicker(sym);
+    });
+
+    document.getElementById('duelSearchForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const tA = document.getElementById('tickerInputA').value.trim();
+      const tB = document.getElementById('tickerInputB').value.trim();
+      if (tA && tB) evaluateDuel(tA, tB);
+    });
+
+    // Auto-load NFLX on first load
+    window.addEventListener('DOMContentLoaded', () => {
+      evaluateTicker('NFLX');
+    });
+  </script>
+</body>
+</html>
