@@ -420,9 +420,142 @@ def run_monte_carlo_banking(n_sims, fwd_eps, bvps, roe, ke, g_bank, justified_pb
     per_share_sims = 0.55 * val_pe_sims + 0.45 * val_pb_sims
     return np.maximum(5.0, per_share_sims)
 
+def fetch_cloud_safe_info(ticker_sym, ticker=None):
+    """
+    Fetches real-time price, metadata and institutional consensus.
+    Guaranteed to work on cloud datacenter IPs (Render, AWS, GCP)
+    where yfinance's raw ticker.info gets blocked with 401 Unauthorized.
+    """
+    info = {}
+    
+    # 1. Direct public Yahoo Chart API (100% reliable for price and name without crumb)
+    try:
+        import requests
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        url_chart = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker_sym}?interval=1d&range=5d'
+        r = requests.get(url_chart, headers=headers, timeout=5)
+        if r.status_code == 200:
+            meta = r.json().get('chart', {}).get('result', [{}])[0].get('meta', {})
+            p = meta.get('regularMarketPrice') or meta.get('chartPreviousClose')
+            if p:
+                info['currentPrice'] = float(p)
+                info['regularMarketPrice'] = float(p)
+            if meta.get('longName'):
+                info['longName'] = meta.get('longName')
+            if meta.get('shortName'):
+                info['shortName'] = meta.get('shortName')
+            if meta.get('currency'):
+                info['currency'] = meta.get('currency')
+    except Exception:
+        pass
+
+    # 2. Crumb-authenticated quoteSummary session to fetch sector, industry, analysts, beta
+    try:
+        import requests
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        s = requests.Session()
+        s.headers.update(headers)
+        try:
+            s.get('https://fc.yahoo.com', timeout=4)
+        except Exception:
+            pass
+        rc = s.get('https://query2.finance.yahoo.com/v1/test/getcrumb', timeout=4)
+        crumb = rc.text.strip()
+        if crumb and '<' not in crumb:
+            modules = 'price,summaryDetail,defaultKeyStatistics,financialData,assetProfile'
+            url_qs = f'https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker_sym}?modules={modules}&crumb={crumb}'
+            rqs = s.get(url_qs, timeout=6)
+            if rqs.status_code == 200:
+                raw_res = rqs.json().get('quoteSummary', {}).get('result', [{}])[0]
+                def extract(mod, key):
+                    val = raw_res.get(mod, {}).get(key)
+                    if isinstance(val, dict):
+                        return val.get('raw', val.get('fmt'))
+                    return val
+
+                price_mod = raw_res.get('price', {})
+                profile_mod = raw_res.get('assetProfile', {})
+
+                for target_k, mod, src_k in [
+                    ('currentPrice', 'price', 'regularMarketPrice'),
+                    ('regularMarketPrice', 'price', 'regularMarketPrice'),
+                    ('longName', 'price', 'longName'),
+                    ('shortName', 'price', 'shortName'),
+                    ('sector', 'assetProfile', 'sector'),
+                    ('industry', 'assetProfile', 'industry'),
+                    ('sharesOutstanding', 'defaultKeyStatistics', 'sharesOutstanding'),
+                    ('marketCap', 'price', 'marketCap'),
+                    ('beta', 'defaultKeyStatistics', 'beta'),
+                    ('targetMeanPrice', 'financialData', 'targetMeanPrice'),
+                    ('targetHighPrice', 'financialData', 'targetHighPrice'),
+                    ('targetLowPrice', 'financialData', 'targetLowPrice'),
+                    ('targetMedianPrice', 'financialData', 'targetMedianPrice'),
+                    ('numberOfAnalystOpinions', 'financialData', 'numberOfAnalystOpinions'),
+                    ('trailingPE', 'summaryDetail', 'trailingPE'),
+                    ('forwardPE', 'summaryDetail', 'forwardPE'),
+                    ('pegRatio', 'defaultKeyStatistics', 'pegRatio'),
+                    ('heldPercentInstitutions', 'defaultKeyStatistics', 'heldPercentInstitutions'),
+                    ('heldPercentInsiders', 'defaultKeyStatistics', 'heldPercentInsiders'),
+                    ('shortPercentOfFloat', 'defaultKeyStatistics', 'shortPercentOfFloat'),
+                    ('shortRatio', 'defaultKeyStatistics', 'shortRatio'),
+                    ('dividendYield', 'summaryDetail', 'dividendYield'),
+                    ('payoutRatio', 'summaryDetail', 'payoutRatio'),
+                    ('ebitda', 'financialData', 'ebitda'),
+                ]:
+                    val = extract(mod, src_k)
+                    if val is not None and not info.get(target_k):
+                        info[target_k] = val
+    except Exception:
+        pass
+
+    # 3. yfinance raw ticker.info if still missing or to supplement
+    if ticker:
+        try:
+            raw_info = getattr(ticker, 'info', None)
+            if raw_info and isinstance(raw_info, dict):
+                for k, v in raw_info.items():
+                    if v is not None and k not in info:
+                        info[k] = v
+        except Exception:
+            pass
+
+    # 4. fast_info fallback
+    if (not info.get('currentPrice') or info.get('currentPrice') == 0) and ticker:
+        try:
+            fi = getattr(ticker, 'fast_info', None)
+            if fi:
+                p = getattr(fi, 'last_price', None) or getattr(fi, 'previous_close', None)
+                if p:
+                    info['currentPrice'] = float(p)
+                    info['regularMarketPrice'] = float(p)
+                if not info.get('sharesOutstanding'):
+                    sh = getattr(fi, 'shares', None)
+                    if sh and sh > 0:
+                        info['sharesOutstanding'] = float(sh)
+                if not info.get('marketCap'):
+                    mc = getattr(fi, 'market_cap', None)
+                    if mc and mc > 0:
+                        info['marketCap'] = float(mc)
+        except Exception:
+            pass
+
+    # 5. history fallback
+    if (not info.get('currentPrice') or info.get('currentPrice') == 0) and ticker:
+        try:
+            hist = ticker.history(period='5d')
+            if hist is not None and not hist.empty and 'Close' in hist:
+                p = float(hist['Close'].dropna().iloc[-1])
+                if p > 0:
+                    info['currentPrice'] = p
+                    info['regularMarketPrice'] = p
+        except Exception:
+            pass
+
+    return info
+
 def analyze_ticker(ticker_sym):
     ticker = yf.Ticker(ticker_sym)
-    info = ticker.info or {}
+    info = fetch_cloud_safe_info(ticker_sym, ticker)
     
     fin = ticker.financials
     bs = ticker.balance_sheet
@@ -508,11 +641,35 @@ def analyze_ticker(ticker_sym):
     shares_bs = extract_series(bs, ['Ordinary Shares Number', 'Share Issued'])
 
     current_price = safe_float(info.get('currentPrice') or info.get('regularMarketPrice'))
+    if current_price <= 0.0:
+        try:
+            fi = getattr(ticker, 'fast_info', None)
+            if fi:
+                current_price = safe_float(getattr(fi, 'last_price', None) or getattr(fi, 'previous_close', None))
+        except Exception:
+            pass
+    if current_price <= 0.0:
+        try:
+            hist = ticker.history(period='5d')
+            if hist is not None and not hist.empty and 'Close' in hist:
+                current_price = safe_float(hist['Close'].dropna().iloc[-1])
+        except Exception:
+            pass
+
     shares_out = safe_float(info.get('sharesOutstanding'))
-    if shares_out == 0.0 and len(shares_bs) > 0 and shares_bs[0] > 0:
-        shares_out = shares_bs[0]
+    if shares_out <= 0.0:
+        try:
+            fi = getattr(ticker, 'fast_info', None)
+            if fi:
+                shares_out = safe_float(getattr(fi, 'shares', None))
+        except Exception:
+            pass
+    if shares_out <= 0.0 and len(shares_bs) > 0 and shares_bs[0] > 0:
+        shares_out = float(shares_bs[0])
+    if shares_out <= 0.0 and len(eps_diluted) > 0 and eps_diluted[0] > 0 and len(net_income) > 0 and net_income[0] > 0:
+        shares_out = float(net_income[0] / eps_diluted[0])
         
-    market_cap = safe_float(info.get('marketCap')) or (current_price * shares_out)
+    market_cap = safe_float(info.get('marketCap')) or (current_price * shares_out if current_price > 0 and shares_out > 0 else 0.0)
     raw_beta = safe_float(info.get('beta'), default=1.1)
     if raw_beta <= 0.2:
         raw_beta = 1.0
