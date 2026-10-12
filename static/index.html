@@ -63,9 +63,14 @@
           <span class="ml-2 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/50">Pro Engine</span>
         </div>
       </div>
-      <div class="flex items-center space-x-2 text-xs text-gray-400">
-        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span>Motor Cuantitativo Conectado</span>
+      <div class="flex items-center space-x-3 text-xs text-gray-400">
+        <a href="https://instagram.com/accionesargentinas" target="_blank" rel="noopener" class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs text-gray-300 font-medium transition-colors">
+          <span class="text-pink-400 font-bold">@accionesargentinas</span>
+        </a>
+        <div class="flex items-center space-x-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="hidden md:inline">Motor Cuantitativo Conectado</span>
+        </div>
       </div>
     </div>
   </header>
@@ -666,8 +671,8 @@
             </div>
             <div class="text-xl font-black text-white mb-1" id="realFcfVal">-</div>
             <div class="text-[10px] text-gray-400 mb-2 flex justify-between">
-              <span>Reportado: <strong id="reportedFcfVal" class="text-gray-300">-</strong></span>
-              <span>SBC: <strong id="sbcAmountVal" class="text-purple-300">-</strong></span>
+              <span>FCF Rep.: <strong id="reportedFcfVal" class="text-gray-300">-</strong></span>
+              <span>SBC (Opciones): <strong id="sbcAmountVal" class="text-purple-300">-</strong></span>
             </div>
           </div>
           <p id="sbcDesc" class="text-[10px] text-gray-300 border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
@@ -1156,8 +1161,12 @@
         Los modelos estocásticos y proyecciones fundamentales se basan en hipótesis estadísticas y datos contables públicos que pueden contener desfasajes temporales o revisiones. 
         Todo inversor debe realizar su propio análisis independiente de debida diligencia (Due Diligence) o consultar con un profesional o asesor financiero regulado antes de tomar decisiones de inversión. El rendimiento histórico no garantiza rentabilidades futuras.
       </p>
+      <div class="mt-3 pt-3 border-t border-dark-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[10px] text-gray-500">
+        <span>📌 <strong>Activos & CEDEARs:</strong> Precios y valuaciones en USD de la acción subyacente (Wall Street), no precio en ARS de CEDEARs locales.</span>
+        <span>📊 <strong>Fuentes:</strong> Estados contables públicos SEC/balances oficiales y cotizaciones de mercado en tiempo real.</span>
+      </div>
     </div>
-    <p>QuantVal Institutional Engine &bull; Plataforma Cuantitativa de Valuación Fundamental &bull; 2026</p>
+    <p class="text-gray-500">QuantVal Institutional Engine • Desarrollado para la comunidad de <a href="https://instagram.com/accionesargentinas" target="_blank" rel="noopener" class="text-pink-400 font-semibold hover:underline">@accionesargentinas</a> • 2026</p>
   </footer>
 
   <!-- Application Logic -->
@@ -1215,12 +1224,19 @@
       try {
         const resp = await fetch(`/api/evaluate/${ticker}`);
         if (!resp.ok) {
-          throw new Error(await resp.text());
+          let errDetail = "";
+          try {
+            const errJson = await resp.json();
+            errDetail = errJson.detail;
+          } catch(e) {
+            errDetail = await resp.text();
+          }
+          throw new Error(errDetail || `Error ${resp.status}`);
         }
         const data = await resp.json();
         renderDashboard(data);
       } catch (err) {
-        alert("Error al valuar el ticker: " + err.message);
+        showToast(err.message || `No se pudo obtener información para ${ticker.toUpperCase()}. Verificá el símbolo.`, true);
       } finally {
         document.getElementById('loadingState').classList.add('hidden');
         document.getElementById('dashboard').classList.remove('opacity-30', 'pointer-events-none');
@@ -1236,7 +1252,7 @@
       document.getElementById('compName').innerText = d.company_name;
       document.getElementById('tickerBadge').innerText = d.ticker;
       document.getElementById('archetypeBadge').innerText = d.archetype_label;
-      document.getElementById('compSector').innerText = `${d.sector} &bull; ${d.industry}`;
+      document.getElementById('compSector').innerText = `${d.sector} • ${d.industry}`;
 
       // Verdict
       document.getElementById('verdictText').innerText = v.verdict;
@@ -1258,7 +1274,8 @@
       document.getElementById('currPrice').innerText = `$${v.current_price.toFixed(2)}`;
       document.getElementById('fairValue').innerText = `$${v.composite_fair_value.toFixed(2)}`;
       document.getElementById('mcMedian').innerText = `$${d.monte_carlo_simulation.median_fair_value.toFixed(2)}`;
-      document.getElementById('wsTarget').innerText = `$${d.market_sentiment_and_ownership.target_mean_price.toFixed(2)}`;
+      const wsT = d.market_sentiment_and_ownership ? d.market_sentiment_and_ownership.target_mean_price : null;
+      document.getElementById('wsTarget').innerText = (wsT && wsT > 0) ? `$${wsT.toFixed(2)}` : 'N/D';
 
       // Valuation Spectrum Gauge
       renderValuationSpectrum(v.current_price, d.monte_carlo_simulation);
@@ -1347,12 +1364,12 @@
         document.getElementById('techKpiTitle').innerText = "P/TBV Justificado";
         document.getElementById('techKpiValue').innerText = `${d.valuation_models.justified_pb_ratio ? d.valuation_models.justified_pb_ratio.toFixed(2) : '2.0'}x`;
         document.getElementById('techKpiSubtitle').innerText = `$${(d.valuation_models.val_pb_justified || v.current_price).toFixed(2)} USD`;
-        document.getElementById('techKpiDesc').innerText = `BVPS: $${d.latest_financials.bvps.toFixed(2)} USD &bull; ROE: ${d.latest_financials.roe.toFixed(1)}%`;
+        document.getElementById('techKpiDesc').innerText = `BVPS: $${d.latest_financials.bvps.toFixed(2)} USD • ROE: ${d.latest_financials.roe.toFixed(1)}%`;
       } else if (kpi.is_tech_asset_light) {
         document.getElementById('techKpiTitle').innerText = "Regla del 40";
         document.getElementById('techKpiValue').innerText = `${kpi.rule_of_40_score.toFixed(1)}%`;
         document.getElementById('techKpiSubtitle').innerText = kpi.rule_of_40_status;
-        document.getElementById('techKpiDesc').innerText = `Capex: ${kpi.capital_intensity_pct.toFixed(1)}% &bull; FCF/NI: ${kpi.fcf_conversion_ni_pct.toFixed(0)}%`;
+        document.getElementById('techKpiDesc').innerText = `Capex: ${kpi.capital_intensity_pct.toFixed(1)}% • FCF/NI: ${kpi.fcf_conversion_ni_pct.toFixed(0)}%`;
       } else {
         document.getElementById('techKpiTitle').innerText = "Intensidad Capex";
         document.getElementById('techKpiValue').innerText = `${kpi.capital_intensity_pct.toFixed(1)}%`;
@@ -1457,7 +1474,7 @@
         document.getElementById('sbcDesc').innerText = "En banca, la rentabilidad se mide vía ROE y capitalización patrimonial en lugar de FCF.";
       } else {
         document.getElementById('realFcfVal').innerText = `$${(sbc.real_economic_fcf / 1e9).toFixed(2)}B`;
-        document.getElementById('sbcIntensityBadge').innerText = `${sbc.sbc_pct_revenue.toFixed(1)}% Ventas`;
+        document.getElementById('sbcIntensityBadge').innerText = `SBC / Ventas: ${sbc.sbc_pct_revenue.toFixed(1)}%`;
         document.getElementById('reportedFcfVal').innerText = `$${(sbc.reported_fcf / 1e9).toFixed(1)}B`;
         document.getElementById('sbcAmountVal').innerText = `$${(sbc.stock_based_compensation / 1e9).toFixed(2)}B`;
         document.getElementById('sbcDesc').innerText = `${sbc.dilution_drag_note} Absorción de recompras brutas: ${sbc.sbc_dilution_offset_pct.toFixed(1)}%.`;
@@ -1526,8 +1543,10 @@
       const spreadReturn = returnVal - waccPct;
       const c1_pass = spreadReturn > 0;
 
-      const c2_pass = isBank ? (f.net_margin > 0.15) : (f.fcf > 0 && f.fcf_margin > 0.05);
-      const c3_pass = isBank ? (f.roe >= 12.0) : (f.operating_margin >= 0.12);
+      const fcfAmount = (f.free_cash_flow !== undefined ? f.free_cash_flow : (f.fcf || 0));
+      const fcfMargin = (f.fcf_margin !== undefined ? f.fcf_margin : 0);
+      const c2_pass = isBank ? ((f.net_margin || 0) > 0.15) : (fcfAmount > 0 && fcfMargin > 0.05);
+      const c3_pass = isBank ? ((f.roe || 0) >= 12.0) : ((f.operating_margin || 0) >= 0.12);
       const c4_pass = isBank ? (solv.z_score >= 8.0) : (mayer.net_debt_to_ebitda <= 2.5);
       const c5_pass = piot.total_score >= 5;
       const c6_pass = !solv.zone.includes("Peligro") && !solv.zone.includes("Distress");
@@ -1544,8 +1563,8 @@
         {
           name: "Generación Libre de Caja",
           pass: c2_pass,
-          metric: isBank ? `Margen Neto ${(f.net_margin*100).toFixed(1)}%` : `FCF ${(f.fcf_margin*100).toFixed(1)}% Ventas`,
-          detail: c2_pass ? "Caja operativa libre positiva y sostenible" : "Flujo de caja libre negativo o comprimido"
+          metric: isBank ? `Margen Neto ${((f.net_margin || 0)*100).toFixed(1)}%` : `FCF ${(fcfMargin*100).toFixed(1)}% Ventas`,
+          detail: c2_pass ? (isBank ? "Margen neto superior a 15%" : `Caja libre sólida ($${(fcfAmount/1e9).toFixed(1)}B, ${(fcfMargin*100).toFixed(1)}% de ventas)`) : (fcfAmount <= 0 ? "Flujo de caja libre negativo" : `Margen FCF insuficiente (${(fcfMargin*100).toFixed(1)}% < umbral 5%)`)
         },
         {
           name: "Margen Operativo Sólido",
@@ -2158,16 +2177,21 @@
       });
     }
 
-    function showToast(msg) {
+    function showToast(msg, isError = false) {
       const t = document.getElementById('toast');
       const m = document.getElementById('toastMsg');
       m.innerText = msg;
+      if (isError) {
+        t.className = "fixed bottom-6 right-6 z-50 transform transition-all duration-300 pointer-events-none glass px-4 py-3 rounded-xl border border-rose-500/60 text-rose-300 text-xs font-semibold shadow-2xl flex items-center gap-2 max-w-md";
+      } else {
+        t.className = "fixed bottom-6 right-6 z-50 transform transition-all duration-300 pointer-events-none glass px-4 py-3 rounded-xl border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-2xl flex items-center gap-2 max-w-md";
+      }
       t.classList.remove('translate-y-20', 'opacity-0');
       t.classList.add('translate-y-0', 'opacity-100');
       setTimeout(() => {
         t.classList.remove('translate-y-0', 'opacity-100');
         t.classList.add('translate-y-20', 'opacity-0');
-      }, 3000);
+      }, isError ? 4500 : 3000);
     }
 
     function quickSearch(sym) {
@@ -2186,6 +2210,12 @@
       const tB = (tickerB || '').trim().toUpperCase();
       if (!tA || !tB) return;
 
+      // Always synchronize both input fields to match active duel pair (QV08)
+      const inA = document.getElementById('tickerInputA');
+      const inB = document.getElementById('tickerInputB');
+      if (inA) inA.value = tA;
+      if (inB) inB.value = tB;
+
       document.getElementById('loadingState').classList.remove('hidden');
       document.getElementById('duelDashboard').classList.add('opacity-30', 'pointer-events-none');
       document.getElementById('loadingTitle').innerText = `Enfrentando ${tA} vs ${tB}...`;
@@ -2196,15 +2226,23 @@
           fetch(`/api/evaluate/${tB}`)
         ]);
 
-        if (!resA.ok) throw new Error(`Error en ticker ${tA}: ` + await resA.text());
-        if (!resB.ok) throw new Error(`Error en ticker ${tB}: ` + await resB.text());
+        if (!resA.ok) {
+          let errTxt = "";
+          try { errTxt = (await resA.json()).detail; } catch(e) { errTxt = await resA.text(); }
+          throw new Error(errTxt || `Error en ticker ${tA}`);
+        }
+        if (!resB.ok) {
+          let errTxt = "";
+          try { errTxt = (await resB.json()).detail; } catch(e) { errTxt = await resB.text(); }
+          throw new Error(errTxt || `Error en ticker ${tB}`);
+        }
 
         const [dataA, dataB] = await Promise.all([resA.json(), resB.json()]);
         currentDuelDataA = dataA;
         currentDuelDataB = dataB;
         renderDuelDashboard(dataA, dataB);
       } catch (err) {
-        alert("Error en el duelo: " + err.message);
+        showToast("Error en el duelo: " + err.message, true);
       } finally {
         document.getElementById('loadingState').classList.add('hidden');
         document.getElementById('duelDashboard').classList.remove('opacity-30', 'pointer-events-none');

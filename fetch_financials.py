@@ -426,16 +426,58 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
     Guaranteed to work on cloud datacenter IPs (Render, AWS, GCP)
     where yfinance's raw ticker.info gets blocked with 401 Unauthorized.
     """
+    sym = str(ticker_sym).strip().upper()
     info = {}
     
-    # 1. Direct public Yahoo Chart API (100% reliable for price and name without crumb)
+    # Static profiles for major mega-caps to guarantee archetype stability under total network blocks
+    TOP_PROFILES = {
+        'NVDA': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'NVIDIA Corporation'},
+        'AAPL': {'sector': 'Technology', 'industry': 'Consumer Electronics', 'longName': 'Apple Inc.'},
+        'MSFT': {'sector': 'Technology', 'industry': 'Software - Infrastructure', 'longName': 'Microsoft Corporation'},
+        'GOOGL': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Alphabet Inc.'},
+        'GOOG': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Alphabet Inc.'},
+        'AMZN': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail', 'longName': 'Amazon.com, Inc.'},
+        'META': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Meta Platforms, Inc.'},
+        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers', 'longName': 'Tesla, Inc.'},
+        'JPM': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'JPMorgan Chase & Co.'},
+        'BAC': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Bank of America Corporation'},
+        'WFC': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Wells Fargo & Company'},
+        'C': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Citigroup Inc.'},
+        'GS': {'sector': 'Financial Services', 'industry': 'Capital Markets', 'longName': 'Goldman Sachs Group, Inc.'},
+        'MS': {'sector': 'Financial Services', 'industry': 'Capital Markets', 'longName': 'Morgan Stanley'},
+        'MELI': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail', 'longName': 'MercadoLibre, Inc.'},
+        'NFLX': {'sector': 'Communication Services', 'industry': 'Entertainment', 'longName': 'Netflix, Inc.'},
+        'AMD': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Advanced Micro Devices, Inc.'},
+        'INTC': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Intel Corporation'},
+        'TSM': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Taiwan Semiconductor Manufacturing'},
+        'AVGO': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Broadcom Inc.'},
+        'QCOM': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Qualcomm Inc.'},
+        'KO': {'sector': 'Consumer Defensive', 'industry': 'Beverages - Non-Alcoholic', 'longName': 'The Coca-Cola Company'},
+        'PEP': {'sector': 'Consumer Defensive', 'industry': 'Beverages - Non-Alcoholic', 'longName': 'PepsiCo, Inc.'},
+        'COST': {'sector': 'Consumer Defensive', 'industry': 'Discount Stores', 'longName': 'Costco Wholesale Corporation'},
+        'WMT': {'sector': 'Consumer Defensive', 'industry': 'Discount Stores', 'longName': 'Walmart Inc.'},
+        'PG': {'sector': 'Consumer Defensive', 'industry': 'Household & Personal Products', 'longName': 'Procter & Gamble Company'},
+        'JNJ': {'sector': 'Healthcare', 'industry': 'Drug Manufacturers - General', 'longName': 'Johnson & Johnson'},
+        'LLY': {'sector': 'Healthcare', 'industry': 'Drug Manufacturers - General', 'longName': 'Eli Lilly and Company'},
+        'UNH': {'sector': 'Healthcare', 'industry': 'Healthcare Plans', 'longName': 'UnitedHealth Group Incorporated'},
+        'XOM': {'sector': 'Energy', 'industry': 'Oil & Gas Integrated', 'longName': 'Exxon Mobil Corporation'},
+        'CVX': {'sector': 'Energy', 'industry': 'Oil & Gas Integrated', 'longName': 'Chevron Corporation'},
+        'CAT': {'sector': 'Industrials', 'industry': 'Farm & Heavy Construction Machinery', 'longName': 'Caterpillar Inc.'},
+        'GE': {'sector': 'Industrials', 'industry': 'Aerospace & Defense', 'longName': 'General Electric Company'},
+        'BA': {'sector': 'Industrials', 'industry': 'Aerospace & Defense', 'longName': 'The Boeing Company'},
+        'BRK.B': {'sector': 'Financial Services', 'industry': 'Insurance - Diversified', 'longName': 'Berkshire Hathaway Inc.'},
+        'BRK-B': {'sector': 'Financial Services', 'industry': 'Insurance - Diversified', 'longName': 'Berkshire Hathaway Inc.'},
+    }
+    
+    # 1. Direct public Yahoo Chart API (100% reliable for price, name and dividends without crumb)
     try:
         import requests
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-        url_chart = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker_sym}?interval=1d&range=5d'
+        url_chart = f'https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=1y&events=div'
         r = requests.get(url_chart, headers=headers, timeout=5)
         if r.status_code == 200:
-            meta = r.json().get('chart', {}).get('result', [{}])[0].get('meta', {})
+            res_data = r.json().get('chart', {}).get('result', [{}])[0]
+            meta = res_data.get('meta', {})
             p = meta.get('regularMarketPrice') or meta.get('chartPreviousClose')
             if p:
                 info['currentPrice'] = float(p)
@@ -446,10 +488,103 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
                 info['shortName'] = meta.get('shortName')
             if meta.get('currency'):
                 info['currency'] = meta.get('currency')
+            
+            # Extract dividends from chart events
+            div_events = res_data.get('events', {}).get('dividends', {})
+            if div_events:
+                trailing_div_sum = sum(float(v.get('amount', 0)) for v in div_events.values())
+                if trailing_div_sum > 0:
+                    info['dividendRate'] = trailing_div_sum
+                    if info.get('currentPrice', 0) > 0:
+                        info['dividendYield'] = trailing_div_sum / info['currentPrice']
     except Exception:
         pass
 
-    # 2. Crumb-authenticated quoteSummary session to fetch sector, industry, analysts, beta
+    # 2. Public Yahoo Search API (guaranteed sector, industry, longName on cloud datacenter IPs)
+    try:
+        import requests
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        url_search = f'https://query1.finance.yahoo.com/v1/finance/search?q={sym}&quotesCount=1&newsCount=0'
+        rs = requests.get(url_search, headers=headers, timeout=5)
+        if rs.status_code == 200:
+            quotes = rs.json().get('quotes', [])
+            if quotes:
+                q0 = quotes[0]
+                if q0.get('sector') and not info.get('sector'):
+                    info['sector'] = q0.get('sector')
+                if q0.get('industry') and not info.get('industry'):
+                    info['industry'] = q0.get('industry')
+                if q0.get('longname') and not info.get('longName'):
+                    info['longName'] = q0.get('longname')
+                if q0.get('shortname') and not info.get('shortName'):
+                    info['shortName'] = q0.get('shortname')
+    except Exception:
+        pass
+
+    # 3. Apply TOP_PROFILES fallback if sector is still missing
+    if (not info.get('sector') or info.get('sector') == 'N/A') and sym in TOP_PROFILES:
+        prof = TOP_PROFILES[sym]
+        info['sector'] = prof['sector']
+        info['industry'] = prof['industry']
+        if not info.get('longName'):
+            info['longName'] = prof['longName']
+
+    # 4. Direct YFinance object methods that do not depend on ticker.info
+    if ticker:
+        try:
+            # Analyst targets
+            apt = getattr(ticker, 'analyst_price_targets', None)
+            if isinstance(apt, dict):
+                if apt.get('mean') and not info.get('targetMeanPrice'):
+                    info['targetMeanPrice'] = float(apt['mean'])
+                if apt.get('high') and not info.get('targetHighPrice'):
+                    info['targetHighPrice'] = float(apt['high'])
+                if apt.get('low') and not info.get('targetLowPrice'):
+                    info['targetLowPrice'] = float(apt['low'])
+                if apt.get('median') and not info.get('targetMedianPrice'):
+                    info['targetMedianPrice'] = float(apt['median'])
+        except Exception:
+            pass
+
+        try:
+            # Recommendation opinions count
+            rec_sum = getattr(ticker, 'recommendations_summary', None)
+            if rec_sum is not None and hasattr(rec_sum, 'iloc') and len(rec_sum) > 0:
+                row0 = rec_sum.iloc[0]
+                total_ops = sum(int(row0.get(k, 0)) for k in ['strongBuy', 'buy', 'hold', 'sell', 'strongSell'] if k in row0)
+                if total_ops > 0 and not info.get('numberOfAnalystOpinions'):
+                    info['numberOfAnalystOpinions'] = total_ops
+        except Exception:
+            pass
+
+        try:
+            # Institutional & insider ownership
+            mh = getattr(ticker, 'major_holders', None)
+            if mh is not None and hasattr(mh, 'index'):
+                for idx, row in mh.iterrows():
+                    lbl = str(row.iloc[0] if len(row) > 0 else idx).lower()
+                    val = safe_float(row.iloc[1] if len(row) > 1 else row.iloc[0])
+                    if 'institution' in lbl and 'percent' in lbl and val > 0:
+                        info['heldPercentInstitutions'] = val
+                    elif 'insider' in lbl and 'percent' in lbl and val > 0:
+                        info['heldPercentInsiders'] = val
+        except Exception:
+            pass
+
+        try:
+            # Dividends fallback if chart API missed it
+            if not info.get('dividendRate'):
+                divs = getattr(ticker, 'dividends', None)
+                if divs is not None and not divs.empty:
+                    last_1y = divs.tail(4).sum()
+                    if last_1y > 0:
+                        info['dividendRate'] = float(last_1y)
+                        if info.get('currentPrice', 0) > 0 and not info.get('dividendYield'):
+                            info['dividendYield'] = float(last_1y) / info['currentPrice']
+        except Exception:
+            pass
+
+    # 5. Crumb-authenticated quoteSummary session to supplement beta, PE, pegRatio if possible
     try:
         import requests
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
@@ -463,7 +598,7 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
         crumb = rc.text.strip()
         if crumb and '<' not in crumb:
             modules = 'price,summaryDetail,defaultKeyStatistics,financialData,assetProfile'
-            url_qs = f'https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker_sym}?modules={modules}&crumb={crumb}'
+            url_qs = f'https://query2.finance.yahoo.com/v10/finance/quoteSummary/{sym}?modules={modules}&crumb={crumb}'
             rqs = s.get(url_qs, timeout=6)
             if rqs.status_code == 200:
                 raw_res = rqs.json().get('quoteSummary', {}).get('result', [{}])[0]
@@ -472,9 +607,6 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
                     if isinstance(val, dict):
                         return val.get('raw', val.get('fmt'))
                     return val
-
-                price_mod = raw_res.get('price', {})
-                profile_mod = raw_res.get('assetProfile', {})
 
                 for target_k, mod, src_k in [
                     ('currentPrice', 'price', 'regularMarketPrice'),
@@ -508,7 +640,7 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
     except Exception:
         pass
 
-    # 3. yfinance raw ticker.info if still missing or to supplement
+    # 6. yfinance raw ticker.info if still missing or to supplement
     if ticker:
         try:
             raw_info = getattr(ticker, 'info', None)
@@ -519,7 +651,7 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
         except Exception:
             pass
 
-    # 4. fast_info fallback
+    # 7. fast_info fallback
     if (not info.get('currentPrice') or info.get('currentPrice') == 0) and ticker:
         try:
             fi = getattr(ticker, 'fast_info', None)
@@ -539,7 +671,7 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
         except Exception:
             pass
 
-    # 5. history fallback
+    # 8. history fallback
     if (not info.get('currentPrice') or info.get('currentPrice') == 0) and ticker:
         try:
             hist = ticker.history(period='5d')
@@ -562,8 +694,7 @@ def analyze_ticker(ticker_sym):
     cf = ticker.cashflow
     
     if fin is None or fin.empty or bs is None or bs.empty:
-        print(f"Error: No financial statements found for ticker {ticker_sym}", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"No financial statements found for ticker {ticker_sym}")
 
     # Check for more recent quarterly statements to build TTM and MRQ balance sheet
     q_fin = getattr(ticker, 'quarterly_financials', None)
@@ -609,7 +740,13 @@ def analyze_ticker(ticker_sym):
 
     rev = extract_series(fin, ['Total Revenue', 'Operating Revenue'])
     gross_profit = extract_series(fin, ['Gross Profit'])
-    ebit = extract_series(fin, ['EBIT', 'Operating Income', 'Total Operating Income As Reported'])
+    ebit = extract_series(fin, ['Operating Income', 'Total Operating Income As Reported', 'EBIT'])
+    
+    # Ensure operating income does not exceed gross profit for non-financial companies
+    for i in range(len(ebit)):
+        gp_val = gross_profit[i] if i < len(gross_profit) else 0.0
+        if gp_val > 0 and ebit[i] > gp_val:
+            ebit[i] = gp_val
     net_income = extract_series(fin, ['Net Income', 'Net Income Common Stockholders', 'Net Income From Continuing And Discontinued Operation'])
     interest_exp = extract_series(fin, ['Interest Expense', 'Net Interest Income'])
     tax_exp = extract_series(fin, ['Tax Provision', 'Income Tax Expense'])
@@ -707,6 +844,7 @@ def analyze_ticker(ticker_sym):
 
     is_tech_media = (sector in ['Technology', 'Communication Services'] or 
                      any(k in industry.lower() for k in ['software', 'entertainment', 'internet', 'media', 'interactive', 'information tech']))
+    is_software_cloud = any(k in industry.lower() for k in ['software', 'interactive', 'internet', 'entertainment', 'cloud', 'information tech'])
     is_semi_or_hardware = any(k in industry.lower() for k in ['semiconductor', 'hardware', 'equipment', 'electronic components', 'memory'])
 
     # Fabless Semiconductor Check (e.g. NVIDIA, AMD, Qualcomm, Broadcom):
@@ -714,17 +852,20 @@ def analyze_ticker(ticker_sym):
     # Foundries / Fabs (TSMC, Intel, Micron) have capex intensity > 15-40%.
     is_fabless_tech = (any(k in industry.lower() for k in ['semiconductor']) and 
                        not any(k in industry.lower() for k in ['memory', 'storage', 'equipment', 'electronic components']) and 
-                       capex_intensity < 0.06 and gross_margin_calc >= 0.48)
+                       capex_intensity < 0.08 and gross_margin_calc >= 0.48)
 
-    if (is_tech_media and not is_semi_or_hardware and capex_intensity < 0.12) or is_fabless_tech:
+    if is_software_cloud or is_fabless_tech or (is_tech_media and not is_semi_or_hardware and capex_intensity < 0.28):
         archetype = "TECH_ASSET_LIGHT"
         if is_fabless_tech:
             archetype_label = "Semiconductores Fabless / Software & IA (Asset-Light)"
             archetype_desc = "Modelo Fabless (sin fundición pesada). Foco en Rule of 40, FCF Conversion, Ecosistema CUDA y Forward P/E."
+        elif is_software_cloud:
+            archetype_label = "Software, Cloud & Plataformas Digitales (Asset-Light)"
+            archetype_desc = "Modelo SaaS / Infraestructura Cloud. Foco en Rule of 40, FCF Conversion, Forward P/E y Escalabilidad."
         else:
             archetype_label = "Tecnológica / Plataforma Digital (Asset-Light)"
             archetype_desc = "Foco en Rule of 40, FCF Conversion, Forward P/E y Escalabilidad sin Capex Pesado."
-    elif is_semi_or_hardware or (sector in ['Technology'] and capex_intensity >= 0.12):
+    elif is_semi_or_hardware or (sector in ['Technology'] and capex_intensity >= 0.25):
         archetype = "CAPITAL_INTENSIVE_HARDWARE"
         archetype_label = "Hardware / Semiconductores con Fabs (Capital Intensivo)"
         archetype_desc = "Foco en Ciclos de Capex, Capacidad Fab, Graham Floor, Valor Libro Tangible y Normalización de Margen."
@@ -1303,7 +1444,8 @@ def analyze_ticker(ticker_sym):
     cagr_base = calc_5y_cagr(scenarios['base']['fair_value'], current_price, total_shareholder_yield)
     cagr_bear = calc_5y_cagr(scenarios['bear']['fair_value'], current_price, total_shareholder_yield)
     cagr_bull = calc_5y_cagr(scenarios['bull']['fair_value'], current_price, total_shareholder_yield)
-    cagr_expected = calc_5y_cagr(scenarios['expected_weighted_fair_value'], current_price, total_shareholder_yield)
+    # Expected TIR as mathematical expectation: 25% Bear + 50% Base + 25% Bull
+    cagr_expected = (0.25 * cagr_bear) + (0.50 * cagr_base) + (0.25 * cagr_bull)
 
     if cagr_expected >= 15.0:
         cagr_verdict = "Atractivo Superior (TIR proyectada supera ampliamente el benchmark de 10% del S&P 500)"
@@ -1572,6 +1714,7 @@ def analyze_ticker(ticker_sym):
             'operating_income_ebit': t_ebit,
             'net_income': t_ni,
             'free_cash_flow': t_fcf,
+            'fcf': t_fcf,
             'operating_cash_flow': t_cfo,
             'total_assets': t_assets,
             'total_debt': t_debt,

@@ -66,8 +66,10 @@ async def evaluate_stock(ticker: str):
         result = analyze_ticker(ticker)
         CACHE[ticker] = (now, result)
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=f"No se encontraron balances públicos para '{ticker}'. Verificá el símbolo (ej. NVDA, AAPL, JPM, MELI, YPF).")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error evaluando {ticker}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error evaluando '{ticker}': {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
