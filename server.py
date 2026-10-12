@@ -19,7 +19,7 @@ except ImportError:
 app = FastAPI(
     title="QuantVal Institutional Valuation Engine",
     description="Fundamental equity valuation platform",
-    version="2.0.0"
+    version="2.4.0"
 )
 
 # Enable CORS
@@ -48,7 +48,7 @@ async def serve_index():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "app": "QuantVal Institutional", "version": "2.3.0-institutional-reconciled"}
+    return {"status": "ok", "app": "QuantVal Pro", "version": "2.4.0-lead-magnet-final"}
 
 @app.get("/api/evaluate/{ticker}")
 async def evaluate_stock(ticker: str, nocache: bool = False):

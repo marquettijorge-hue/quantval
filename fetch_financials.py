@@ -1076,8 +1076,9 @@ def analyze_ticker(ticker_sym):
         'META': {'fwd_rev_growth_0y': 0.19, 'fwd_eps_growth_0y': 0.22, 'fwd_eps_0y': 25.50, 'fwd_rev_0y': 185e9},
         'AMZN': {'fwd_rev_growth_0y': 0.12, 'fwd_eps_growth_0y': 0.25, 'fwd_eps_0y': 6.20, 'fwd_rev_0y': 690e9},
         'MELI': {'fwd_rev_growth_0y': 0.32, 'fwd_eps_growth_0y': 0.38, 'fwd_eps_0y': 52.00, 'fwd_rev_0y': 25e9},
-        'NFLX': {'fwd_rev_growth_0y': 0.15, 'fwd_eps_growth_0y': 0.24, 'fwd_eps_0y': 24.50, 'fwd_rev_0y': 45e9},
+        'NFLX': {'fwd_rev_growth_0y': 0.15, 'fwd_eps_growth_0y': 0.24, 'fwd_eps_0y': 3.58, 'fwd_rev_0y': 45e9},
         'TSLA': {'fwd_rev_growth_0y': 0.15, 'fwd_eps_growth_0y': 0.18, 'fwd_eps_0y': 3.10, 'fwd_rev_0y': 115e9},
+        'JPM': {'fwd_rev_growth_0y': 0.06, 'fwd_eps_growth_0y': 0.08, 'fwd_eps_0y': 18.50, 'fwd_rev_0y': 180e9},
     }
 
     ee = getattr(ticker, 'earnings_estimate', None)
@@ -1159,16 +1160,16 @@ def analyze_ticker(ticker_sym):
     hist_roic_avg = float(np.mean(roic_hist_list)) if roic_hist_list else roic
 
     # Historical P/E estimate (3y mean price vs 3y mean diluted EPS)
-    hist_pe_avg = trailing_pe
+    hist_pe_avg = None
     try:
         hist_prices = ticker.history(period="3y")
         if hist_prices is not None and not hist_prices.empty:
             mean_3y_price = float(hist_prices['Close'].mean())
             eps_positive = [eps_diluted[i] for i in range(min(3, len(eps_diluted))) if len(eps_diluted) > i and eps_diluted[i] > 0]
             if eps_positive and np.mean(eps_positive) > 0:
-                hist_pe_avg = float(mean_3y_price / np.mean(eps_positive))
+                hist_pe_avg = round(float(mean_3y_price / np.mean(eps_positive)), 1)
     except Exception:
-        pass
+        hist_pe_avg = None
 
     # Sector Benchmark Lookup
     sec_bm = get_sector_benchmark(sector, industry)
@@ -1179,8 +1180,8 @@ def analyze_ticker(ticker_sym):
     curr_fcf_m = (t_fcf / t_rev) if t_rev > 0 else 0.0
     curr_ev_ebitda = safe_float(info.get('enterpriseToEbitda')) or (15.0 if ebitda <= 0 else (market_cap + net_debt) / ebitda)
     
-    pe_vs_sector_pct = ((trailing_pe - sec_bm['pe']) / sec_bm['pe'] * 100) if (sec_bm['pe'] > 0 and trailing_pe > 0) else 0.0
-    pe_vs_hist_pct = ((trailing_pe - hist_pe_avg) / hist_pe_avg * 100) if (hist_pe_avg > 0 and trailing_pe > 0) else 0.0
+    pe_vs_sector_pct = round(((trailing_pe - sec_bm['pe']) / sec_bm['pe'] * 100), 1) if (sec_bm['pe'] > 0 and trailing_pe > 0) else None
+    pe_vs_hist_pct = round(((trailing_pe - hist_pe_avg) / hist_pe_avg * 100), 1) if (hist_pe_avg is not None and hist_pe_avg > 0 and trailing_pe > 0) else None
     roic_spread_sector = (roic - sec_bm['roic']) * 100
     roic_spread_hist = (roic - hist_roic_avg) * 100
     op_m_spread_sector = (curr_op_m - sec_bm['operating_margin']) * 100
@@ -1194,19 +1195,25 @@ def analyze_ticker(ticker_sym):
     else:
         moat_diagnostic = "Sin Moat / Rentabilidad en Línea con la Industria"
 
-    if pe_vs_sector_pct <= -15.0:
-        sector_val_diagnostic = "Descuento Significativo vs Sector"
-    elif pe_vs_sector_pct <= 15.0:
-        sector_val_diagnostic = "Valuación en Línea con el Sector"
+    if pe_vs_sector_pct is not None:
+        if pe_vs_sector_pct <= -15.0:
+            sector_val_diagnostic = "Descuento Significativo vs Sector"
+        elif pe_vs_sector_pct <= 15.0:
+            sector_val_diagnostic = "Valuación en Línea con el Sector"
+        else:
+            sector_val_diagnostic = "Prima de Calidad sobre el Sector"
     else:
-        sector_val_diagnostic = "Prima de Calidad sobre el Sector"
+        sector_val_diagnostic = "Sin Datos del Sector"
 
-    if pe_vs_hist_pct <= -15.0:
-        hist_val_diagnostic = "Descuento Histórico Propio (Oportunidad)"
-    elif pe_vs_hist_pct <= 15.0:
-        hist_val_diagnostic = "En Rango Histórico Normal"
+    if pe_vs_hist_pct is not None:
+        if pe_vs_hist_pct <= -15.0:
+            hist_val_diagnostic = "Descuento Histórico Propio (Oportunidad)"
+        elif pe_vs_hist_pct <= 15.0:
+            hist_val_diagnostic = "En Rango Histórico Normal"
+        else:
+            hist_val_diagnostic = "Cotizando con Prima vs su Historial"
     else:
-        hist_val_diagnostic = "Cotizando con Prima vs su Historial"
+        hist_val_diagnostic = "Sin Histórico Suficiente"
 
     if op_m_spread_hist >= 1.5:
         margin_trend_diagnostic = "Márgenes en Expansión (Apalancamiento Operativo Sano)"
@@ -1458,34 +1465,24 @@ def analyze_ticker(ticker_sym):
         epv_per_share=epv_per_share,
         current_price=current_price
     )
-    ev_val = scenarios['expected_weighted_fair_value']
-
-    if archetype == "FINANCIALS_BANKING":
-        composite_fair_value = (ev_val * 0.50) + (mc_median * 0.30) + (val_pb_justified * 0.20)
-    elif archetype == "TECH_ASSET_LIGHT":
-        floor_anchor = max(epv_per_share, val_pe_conservative) if epv_per_share > 0 else val_pe_conservative
-        composite_fair_value = (ev_val * 0.55) + (mc_median * 0.30) + (floor_anchor * 0.15)
-    elif archetype in ["CAPITAL_INTENSIVE_HARDWARE", "CAPITAL_INTENSIVE_INDUSTRIAL"]:
-        floor_anchor = graham_number if graham_number > 0 else epv_per_share
-        if floor_anchor > 0:
-            composite_fair_value = (ev_val * 0.50) + (mc_median * 0.30) + (floor_anchor * 0.20)
-        else:
-            composite_fair_value = (ev_val * 0.60) + (mc_median * 0.40)
-    else:
-        composite_fair_value = (ev_val * 0.55) + (mc_median * 0.30) + (val_pe_conservative * 0.15)
+    ev_val = round(float(scenarios['expected_weighted_fair_value']), 2)
+    composite_fair_value = ev_val
         
-    if composite_fair_value >= current_price:
-        margin_of_safety = ((composite_fair_value - current_price) / composite_fair_value * 100) if composite_fair_value > 0 else 0.0
+    # Unified Margin of Safety (Graham & Dodd Standard: MoS = (Fair Value - Price) / Fair Value)
+    if composite_fair_value > 0 and current_price > 0:
+        margin_of_safety = round(((composite_fair_value - current_price) / composite_fair_value * 100.0), 2)
     else:
-        margin_of_safety = ((composite_fair_value - current_price) / current_price * 100) if current_price > 0 else -99.9
+        margin_of_safety = None
 
-    # Strict Value Investing Verdict (Graham / Klarman Standard)
-    if margin_of_safety >= 25.0:
-        rec_verdict = "SUBVALUADA / OPORTUNIDAD CON AMPLIO MARGEN DE SEGURIDAD"
+    # Strict Value Investing Verdict
+    if margin_of_safety is None:
+        rec_verdict = "DATOS INSUFICIENTES PARA VALUACIÓN"
+    elif margin_of_safety >= 25.0:
+        rec_verdict = "SUBVALUADA / AMPLIO MARGEN DE SEGURIDAD"
     elif margin_of_safety >= 10.0:
         rec_verdict = "VALORACIÓN ATRACTIVA / MARGEN MODERADO"
     elif margin_of_safety >= -10.0:
-        rec_verdict = "VALOR RAZONABLE / MANTENER (Fair Value)"
+        rec_verdict = "VALOR RAZONABLE / FAIR VALUE"
     else:
         rec_verdict = "SOBREVALORADA / SIN MARGEN DE SEGURIDAD"
 
@@ -1745,6 +1742,73 @@ def analyze_ticker(ticker_sym):
         'dividends': round(score_d, 1)
     }
 
+    # 6 Verified Core Fundamental Indicators (Lead Magnet Contract)
+    core_indicators = [
+        {
+            'id': 'revenue_growth',
+            'name': 'Ingresos y Crecimiento YoY',
+            'value': t_rev,
+            'growth_pct': round(fwd_rev_growth_0y * 100, 1),
+            'formatted': f"${t_rev/1e9:.2f}B (+{fwd_rev_growth_0y*100:.1f}%)" if t_rev >= 1e9 else (f"${t_rev/1e6:.1f}M (+{fwd_rev_growth_0y*100:.1f}%)" if t_rev > 0 else "N/D"),
+            'source': 'SEC Filings (10-K/10-Q) & TTM',
+            'period': 'TTM / Reporte Oficial',
+            'status': 'available' if t_rev > 0 else 'missing',
+            'description': 'Facturación total reportada y tasa de crecimiento esperada'
+        },
+        {
+            'id': 'operating_margin',
+            'name': 'Margen Operativo GAAP' if archetype != "FINANCIALS_BANKING" else 'Margen Neto (Banca)',
+            'value': round((t_ebit / t_rev * 100), 1) if (t_rev > 0 and archetype != "FINANCIALS_BANKING") else (round((t_ni / t_rev * 100), 1) if t_rev > 0 else None),
+            'formatted': f"{t_ebit / t_rev * 100:.1f}%" if (t_rev > 0 and archetype != "FINANCIALS_BANKING") else (f"{t_ni / t_rev * 100:.1f}%" if t_rev > 0 else "N/D"),
+            'source': 'SEC 10-K / Income Statement GAAP',
+            'period': 'TTM',
+            'status': 'available' if t_rev > 0 else 'missing',
+            'description': 'Eficiencia operativa pura sin items extraordinarios' if archetype != "FINANCIALS_BANKING" else 'Margen neto bancario sobre margen de intermediación'
+        },
+        {
+            'id': 'free_cash_flow',
+            'name': 'Flujo de Caja Libre (FCF)',
+            'value': t_fcf if archetype != "FINANCIALS_BANKING" else None,
+            'margin_pct': round((t_fcf / t_rev * 100), 1) if (t_rev > 0 and archetype != "FINANCIALS_BANKING") else None,
+            'formatted': (f"${t_fcf/1e9:.2f}B (Margen {t_fcf/t_rev*100:.1f}%)" if t_fcf >= 1e9 else (f"${t_fcf/1e6:.1f}M (Margen {t_fcf/t_rev*100:.1f}%)" if t_fcf > 0 else f"${t_fcf/1e6:.1f}M")) if archetype != "FINANCIALS_BANKING" else "N/A (Modelo Bancario)",
+            'source': 'Cash Flow Statement (CFO - CapEx)',
+            'period': 'TTM',
+            'status': 'available' if (archetype != "FINANCIALS_BANKING" and t_fcf is not None) else ('not_applicable' if archetype == "FINANCIALS_BANKING" else 'missing'),
+            'description': 'Efectivo real generado tras inversiones de capital (CapEx)' if archetype != "FINANCIALS_BANKING" else 'En entidades financieras el flujo operativo se distorsiona por depósitos y cartera crediticia; se evalúa solvencia patrimonial'
+        },
+        {
+            'id': 'solvency',
+            'name': 'Solvencia Financiera' if archetype != "FINANCIALS_BANKING" else 'Solvencia Patrimonial (PN/Activos)',
+            'value': round(net_debt_to_ebitda, 2) if archetype != "FINANCIALS_BANKING" else (round(t_equity / t_assets * 100, 1) if t_assets > 0 else None),
+            'formatted': (f"{net_debt_to_ebitda:.2f}x Deuda Neta/EBITDA" if net_debt_to_ebitda is not None else "N/D") if archetype != "FINANCIALS_BANKING" else (f"{t_equity/t_assets*100:.1f}% PN/Activos" if t_assets > 0 else "N/D"),
+            'source': 'Balance Sheet (Deuda Neta, Efectivo, EBITDA)',
+            'period': 'Último Trimestre',
+            'status': 'available',
+            'description': ('Caja neta positiva (sin deuda neta)' if net_debt_to_ebitda <= 0 else (f'Carga de deuda baja ({net_debt_to_ebitda:.1f}x EBITDA)' if net_debt_to_ebitda < 2.0 else f'Apalancamiento moderado ({net_debt_to_ebitda:.1f}x EBITDA)')) if archetype != "FINANCIALS_BANKING" else f'Ratio de respaldo de capital patrimonial sobre activos totales'
+        },
+        {
+            'id': 'roic_vs_wacc',
+            'name': 'Retorno de Capital (ROIC vs WACC)' if archetype != "FINANCIALS_BANKING" else 'Retorno sobre Patrimonio (ROE vs Ke)',
+            'value': round(roic * 100, 1) if archetype != "FINANCIALS_BANKING" else round(roe * 100, 1),
+            'benchmark_cost': round(wacc * 100, 1),
+            'formatted': f"{roic*100:.1f}% vs WACC {wacc*100:.1f}% (Spread +{(roic-wacc)*100:.1f}%)" if archetype != "FINANCIALS_BANKING" else f"ROE {roe*100:.1f}% vs Costo Capital {wacc*100:.1f}% (Spread +{(roe-wacc)*100:.1f}%)",
+            'source': 'NOPAT / Capital Invertido (Damodaran)',
+            'period': 'TTM',
+            'status': 'available',
+            'description': 'Generación de valor económico sobre el costo de financiamiento (Moat)' if (roic > wacc if archetype != "FINANCIALS_BANKING" else roe > wacc) else 'Rentabilidad ajustada respecto al costo de capital'
+        },
+        {
+            'id': 'valuation_multiple',
+            'name': 'Múltiplo de Valuación (P/E)' if archetype != "FINANCIALS_BANKING" else 'Múltiplo Patrimonial (P/B)',
+            'value': round(trailing_pe, 1) if archetype != "FINANCIALS_BANKING" else (round(current_price / bvps, 2) if bvps > 0 else None),
+            'formatted': (f"Trailing: {trailing_pe:.1f}x | Fwd: {forward_pe:.1f}x" if (trailing_pe > 0 and forward_pe > 0) else (f"Trailing P/E: {trailing_pe:.1f}x" if trailing_pe > 0 else "N/D")) if archetype != "FINANCIALS_BANKING" else (f"P/B: {current_price/bvps:.2f}x (Justificado: {justified_pb:.2f}x)" if bvps > 0 else "N/D"),
+            'source': 'Cotización en Tiempo Real / Balances SEC',
+            'period': 'Tiempo Real',
+            'status': 'available' if (trailing_pe > 0 or bvps > 0) else 'missing',
+            'description': 'Precio pagado por dólar de ganancia neta o por valor en libros'
+        }
+    ]
+
     # Assemble Result Object
     result = {
         'company_name': info.get('shortName') or info.get('longName') or ticker_sym,
@@ -1758,6 +1822,7 @@ def analyze_ticker(ticker_sym):
         'current_price': current_price,
         'market_cap': market_cap,
         'shares_outstanding': shares_out,
+        'core_indicators': core_indicators,
         'beta': {
             'raw_beta': raw_beta,
             'blume_adjusted_beta': blume_beta
