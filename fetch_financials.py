@@ -429,44 +429,44 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
     sym = str(ticker_sym).strip().upper()
     info = {}
     
-    # Static profiles for major mega-caps to guarantee archetype stability under total network blocks
+    # Static profiles for major mega-caps to guarantee archetype and beta stability under total network blocks
     TOP_PROFILES = {
-        'NVDA': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'NVIDIA Corporation'},
-        'AAPL': {'sector': 'Technology', 'industry': 'Consumer Electronics', 'longName': 'Apple Inc.'},
-        'MSFT': {'sector': 'Technology', 'industry': 'Software - Infrastructure', 'longName': 'Microsoft Corporation'},
-        'GOOGL': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Alphabet Inc.'},
-        'GOOG': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Alphabet Inc.'},
-        'AMZN': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail', 'longName': 'Amazon.com, Inc.'},
-        'META': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Meta Platforms, Inc.'},
-        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers', 'longName': 'Tesla, Inc.'},
-        'JPM': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'JPMorgan Chase & Co.'},
-        'BAC': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Bank of America Corporation'},
-        'WFC': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Wells Fargo & Company'},
-        'C': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Citigroup Inc.'},
-        'GS': {'sector': 'Financial Services', 'industry': 'Capital Markets', 'longName': 'Goldman Sachs Group, Inc.'},
-        'MS': {'sector': 'Financial Services', 'industry': 'Capital Markets', 'longName': 'Morgan Stanley'},
-        'MELI': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail', 'longName': 'MercadoLibre, Inc.'},
-        'NFLX': {'sector': 'Communication Services', 'industry': 'Entertainment', 'longName': 'Netflix, Inc.'},
-        'AMD': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Advanced Micro Devices, Inc.'},
-        'INTC': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Intel Corporation'},
-        'TSM': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Taiwan Semiconductor Manufacturing'},
-        'AVGO': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Broadcom Inc.'},
-        'QCOM': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Qualcomm Inc.'},
-        'KO': {'sector': 'Consumer Defensive', 'industry': 'Beverages - Non-Alcoholic', 'longName': 'The Coca-Cola Company'},
-        'PEP': {'sector': 'Consumer Defensive', 'industry': 'Beverages - Non-Alcoholic', 'longName': 'PepsiCo, Inc.'},
-        'COST': {'sector': 'Consumer Defensive', 'industry': 'Discount Stores', 'longName': 'Costco Wholesale Corporation'},
-        'WMT': {'sector': 'Consumer Defensive', 'industry': 'Discount Stores', 'longName': 'Walmart Inc.'},
-        'PG': {'sector': 'Consumer Defensive', 'industry': 'Household & Personal Products', 'longName': 'Procter & Gamble Company'},
-        'JNJ': {'sector': 'Healthcare', 'industry': 'Drug Manufacturers - General', 'longName': 'Johnson & Johnson'},
-        'LLY': {'sector': 'Healthcare', 'industry': 'Drug Manufacturers - General', 'longName': 'Eli Lilly and Company'},
-        'UNH': {'sector': 'Healthcare', 'industry': 'Healthcare Plans', 'longName': 'UnitedHealth Group Incorporated'},
-        'XOM': {'sector': 'Energy', 'industry': 'Oil & Gas Integrated', 'longName': 'Exxon Mobil Corporation'},
-        'CVX': {'sector': 'Energy', 'industry': 'Oil & Gas Integrated', 'longName': 'Chevron Corporation'},
-        'CAT': {'sector': 'Industrials', 'industry': 'Farm & Heavy Construction Machinery', 'longName': 'Caterpillar Inc.'},
-        'GE': {'sector': 'Industrials', 'industry': 'Aerospace & Defense', 'longName': 'General Electric Company'},
-        'BA': {'sector': 'Industrials', 'industry': 'Aerospace & Defense', 'longName': 'The Boeing Company'},
-        'BRK.B': {'sector': 'Financial Services', 'industry': 'Insurance - Diversified', 'longName': 'Berkshire Hathaway Inc.'},
-        'BRK-B': {'sector': 'Financial Services', 'industry': 'Insurance - Diversified', 'longName': 'Berkshire Hathaway Inc.'},
+        'NVDA': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'NVIDIA Corporation', 'beta': 2.22},
+        'AAPL': {'sector': 'Technology', 'industry': 'Consumer Electronics', 'longName': 'Apple Inc.', 'beta': 1.15},
+        'MSFT': {'sector': 'Technology', 'industry': 'Software - Infrastructure', 'longName': 'Microsoft Corporation', 'beta': 1.25},
+        'GOOGL': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Alphabet Inc.', 'beta': 1.10},
+        'GOOG': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Alphabet Inc.', 'beta': 1.10},
+        'AMZN': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail', 'longName': 'Amazon.com, Inc.', 'beta': 1.35},
+        'META': {'sector': 'Communication Services', 'industry': 'Internet Content & Information', 'longName': 'Meta Platforms, Inc.', 'beta': 1.30},
+        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers', 'longName': 'Tesla, Inc.', 'beta': 2.40},
+        'JPM': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'JPMorgan Chase & Co.', 'beta': 1.10},
+        'BAC': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Bank of America Corporation', 'beta': 1.20},
+        'WFC': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Wells Fargo & Company', 'beta': 1.15},
+        'C': {'sector': 'Financial Services', 'industry': 'Banks - Diversified', 'longName': 'Citigroup Inc.', 'beta': 1.35},
+        'GS': {'sector': 'Financial Services', 'industry': 'Capital Markets', 'longName': 'Goldman Sachs Group, Inc.', 'beta': 1.30},
+        'MS': {'sector': 'Financial Services', 'industry': 'Capital Markets', 'longName': 'Morgan Stanley', 'beta': 1.30},
+        'MELI': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail', 'longName': 'MercadoLibre, Inc.', 'beta': 1.60},
+        'NFLX': {'sector': 'Communication Services', 'industry': 'Entertainment', 'longName': 'Netflix, Inc.', 'beta': 1.30},
+        'AMD': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Advanced Micro Devices, Inc.', 'beta': 1.85},
+        'INTC': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Intel Corporation', 'beta': 1.25},
+        'TSM': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Taiwan Semiconductor Manufacturing', 'beta': 1.25},
+        'AVGO': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Broadcom Inc.', 'beta': 1.30},
+        'QCOM': {'sector': 'Technology', 'industry': 'Semiconductors', 'longName': 'Qualcomm Inc.', 'beta': 1.30},
+        'KO': {'sector': 'Consumer Defensive', 'industry': 'Beverages - Non-Alcoholic', 'longName': 'The Coca-Cola Company', 'beta': 0.60},
+        'PEP': {'sector': 'Consumer Defensive', 'industry': 'Beverages - Non-Alcoholic', 'longName': 'PepsiCo, Inc.', 'beta': 0.60},
+        'COST': {'sector': 'Consumer Defensive', 'industry': 'Discount Stores', 'longName': 'Costco Wholesale Corporation', 'beta': 0.80},
+        'WMT': {'sector': 'Consumer Defensive', 'industry': 'Discount Stores', 'longName': 'Walmart Inc.', 'beta': 0.55},
+        'PG': {'sector': 'Consumer Defensive', 'industry': 'Household & Personal Products', 'longName': 'Procter & Gamble Company', 'beta': 0.50},
+        'JNJ': {'sector': 'Healthcare', 'industry': 'Drug Manufacturers - General', 'longName': 'Johnson & Johnson', 'beta': 0.55},
+        'LLY': {'sector': 'Healthcare', 'industry': 'Drug Manufacturers - General', 'longName': 'Eli Lilly and Company', 'beta': 0.70},
+        'UNH': {'sector': 'Healthcare', 'industry': 'Healthcare Plans', 'longName': 'UnitedHealth Group Incorporated', 'beta': 0.60},
+        'XOM': {'sector': 'Energy', 'industry': 'Oil & Gas Integrated', 'longName': 'Exxon Mobil Corporation', 'beta': 0.90},
+        'CVX': {'sector': 'Energy', 'industry': 'Oil & Gas Integrated', 'longName': 'Chevron Corporation', 'beta': 0.95},
+        'CAT': {'sector': 'Industrials', 'industry': 'Farm & Heavy Construction Machinery', 'longName': 'Caterpillar Inc.', 'beta': 1.15},
+        'GE': {'sector': 'Industrials', 'industry': 'Aerospace & Defense', 'longName': 'General Electric Company', 'beta': 1.20},
+        'BA': {'sector': 'Industrials', 'industry': 'Aerospace & Defense', 'longName': 'The Boeing Company', 'beta': 1.45},
+        'BRK.B': {'sector': 'Financial Services', 'industry': 'Insurance - Diversified', 'longName': 'Berkshire Hathaway Inc.', 'beta': 0.85},
+        'BRK-B': {'sector': 'Financial Services', 'industry': 'Insurance - Diversified', 'longName': 'Berkshire Hathaway Inc.', 'beta': 0.85},
     }
     
     # 1. Direct public Yahoo Chart API (100% reliable for price, name and dividends without crumb)
@@ -521,13 +521,16 @@ def fetch_cloud_safe_info(ticker_sym, ticker=None):
     except Exception:
         pass
 
-    # 3. Apply TOP_PROFILES fallback if sector is still missing
-    if (not info.get('sector') or info.get('sector') == 'N/A') and sym in TOP_PROFILES:
+    # 3. Apply TOP_PROFILES fallback if sector or beta is missing
+    if sym in TOP_PROFILES:
         prof = TOP_PROFILES[sym]
-        info['sector'] = prof['sector']
-        info['industry'] = prof['industry']
-        if not info.get('longName'):
+        if (not info.get('sector') or info.get('sector') == 'N/A'):
+            info['sector'] = prof['sector']
+            info['industry'] = prof['industry']
+        if not info.get('longName') and prof.get('longName'):
             info['longName'] = prof['longName']
+        if not info.get('beta') and prof.get('beta'):
+            info['beta'] = prof.get('beta')
 
     # 4. Direct YFinance object methods that do not depend on ticker.info
     if ticker:

@@ -48,7 +48,7 @@ async def serve_index():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "app": "QuantVal Institutional", "version": "2.2.0-consensus-resilient"}
+    return {"status": "ok", "app": "QuantVal Institutional", "version": "2.3.0-institutional-reconciled"}
 
 @app.get("/api/evaluate/{ticker}")
 async def evaluate_stock(ticker: str, nocache: bool = False):
