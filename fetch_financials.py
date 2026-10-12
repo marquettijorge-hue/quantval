@@ -1581,25 +1581,31 @@ def analyze_ticker(ticker_sym):
     # --- 12. SNOWFLAKE RADAR 5-PILLAR INSTITUTIONAL SCORING (0-100) ---
     # Pillar 1: Value
     score_v = 0.0
-    if margin_of_safety >= 20.0:
-        score_v += 40.0
-    elif margin_of_safety >= 10.0:
-        score_v += 32.0
-    elif margin_of_safety >= 0.0:
-        score_v += 24.0
-    elif margin_of_safety >= -15.0:
-        score_v += 14.0
+    if margin_of_safety is not None:
+        if margin_of_safety >= 20.0:
+            score_v += 40.0
+        elif margin_of_safety >= 10.0:
+            score_v += 32.0
+        elif margin_of_safety >= 0.0:
+            score_v += 24.0
+        elif margin_of_safety >= -15.0:
+            score_v += 14.0
+        else:
+            score_v += 6.0
     else:
-        score_v += 6.0
+        score_v += 20.0
 
-    if pe_vs_sector_pct <= -15.0:
-        score_v += 30.0
-    elif pe_vs_sector_pct <= 0.0:
-        score_v += 22.0
-    elif pe_vs_sector_pct <= 20.0:
-        score_v += 14.0
+    if pe_vs_sector_pct is not None:
+        if pe_vs_sector_pct <= -15.0:
+            score_v += 30.0
+        elif pe_vs_sector_pct <= 0.0:
+            score_v += 22.0
+        elif pe_vs_sector_pct <= 20.0:
+            score_v += 14.0
+        else:
+            score_v += 6.0
     else:
-        score_v += 6.0
+        score_v += 15.0
 
     if peg_ratio > 0 and peg_ratio <= 1.0:
         score_v += 30.0
@@ -2156,7 +2162,8 @@ def print_mega_executive_report(res):
     sp = bm.get('relative_spreads', {})
     
     print(f"6. BENCHMARKING COMPETITIVO (HISTÓRICO 3Y Y SECTOR: {bm.get('sector_benchmark_name', 'Sector')}):")
-    print(f" • Múltiplo P/E Trailing:  Actual: {cur.get('pe_trailing', 0):.1f}x | Histórico 3y: {hist.get('pe_trailing_avg', 0):.1f}x | Sector: {sec.get('pe', 0):.1f}x (Dif vs Sector: {sp.get('pe_vs_sector_pct', 0):+.1f}%)")
+    pe_sec_str = f"{sp.get('pe_vs_sector_pct'):+.1f}%" if sp.get('pe_vs_sector_pct') is not None else "N/D"
+    print(f" • Múltiplo P/E Trailing:  Actual: {cur.get('pe_trailing', 0):.1f}x | Histórico 3y: {hist.get('pe_trailing_avg', 0):.1f}x | Sector: {sec.get('pe', 0):.1f}x (Dif vs Sector: {pe_sec_str})")
     print(f" • Margen Operativo EBIT:  Actual: {cur.get('operating_margin_pct', 0):.1f}% | Histórico 3y: {hist.get('operating_margin_pct', 0):.1f}% | Sector: {sec.get('operating_margin_pct', 0):.1f}% (Spread: {sp.get('op_margin_spread_vs_sector', 0):+.1f}%)")
     print(f" • Retorno Capital (ROIC): Actual: {cur.get('roic_pct', 0):.1f}% | Histórico 3y: {hist.get('roic_pct', 0):.1f}% | Sector: {sec.get('roic_pct', 0):.1f}% (Spread Moat: {sp.get('roic_spread_vs_sector', 0):+.1f}%)")
     print(f" • Diagnóstico Competitivo: {diag.get('moat_rating', '')} | {diag.get('sector_valuation_rating', '')}")
@@ -2166,7 +2173,8 @@ def print_mega_executive_report(res):
     print("7. VEREDICTO FINAL Y MARGEN DE SEGURIDAD INTEGRADO:")
     print(f" • VALOR INTRÍNSECO COMPUESTO: ${p['composite_fair_value']:.2f} USD")
     print(f" • PRECIO DE COTIZACIÓN ACTUAL: ${p['current_price']:.2f} USD")
-    print(f" • MARGEN DE SEGURIDAD (MoS):   {p['margin_of_safety_pct']:+.2f}%")
+    mos_str = f"{p['margin_of_safety_pct']:+.2f}%" if p['margin_of_safety_pct'] is not None else "N/D"
+    print(f" • MARGEN DE SEGURIDAD (MoS):   {mos_str}")
     print(f" • DECISIÓN DE INVERSIÓN:       {p['verdict']}")
     print("=" * 85)
 
