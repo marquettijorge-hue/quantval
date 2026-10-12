@@ -48,15 +48,15 @@ async def serve_index():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "app": "QuantVal Institutional"}
+    return {"status": "ok", "app": "QuantVal Institutional", "version": "2.1.0-audit-fixed"}
 
 @app.get("/api/evaluate/{ticker}")
-async def evaluate_stock(ticker: str):
+async def evaluate_stock(ticker: str, nocache: bool = False):
     ticker = ticker.strip().upper()
     now = time.time()
     
     # Check cache
-    if ticker in CACHE:
+    if not nocache and ticker in CACHE:
         cached_time, cached_data = CACHE[ticker]
         if now - cached_time < CACHE_TTL:
             return cached_data
