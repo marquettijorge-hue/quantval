@@ -315,30 +315,33 @@ def calculate_probabilistic_scenarios(archetype, fwd_rev_growth_0y, fwd_eps_0y, 
         )
         bull_hypo = "Aceleración secular, expansión de márgenes por apalancamiento operativo y sólida captura de cuota de mercado."
 
-    ev_weighted = (0.25 * v_bear) + (0.50 * v_base) + (0.25 * v_bull)
+    v_bear = round(float(v_bear), 2)
+    v_base = round(float(v_base), 2)
+    v_bull = round(float(v_bull), 2)
+    ev_weighted = round((0.25 * v_bear) + (0.50 * v_base) + (0.25 * v_bull), 2)
     return {
         'bear': {
             'probability': 0.25,
-            'fair_value': round(float(v_bear), 2),
+            'fair_value': v_bear,
             'growth_assumed_pct': round(float(g_bear if archetype != "FINANCIALS_BANKING" else (roe_bear*100)), 1),
             'wacc_assumed_pct': round(float((wacc_bear if archetype != "FINANCIALS_BANKING" else ke_bear) * 100), 2),
             'hypothesis': bear_hypo
         },
         'base': {
             'probability': 0.50,
-            'fair_value': round(float(v_base), 2),
+            'fair_value': v_base,
             'growth_assumed_pct': round(float(g_base if archetype != "FINANCIALS_BANKING" else (roe_base*100)), 1),
             'wacc_assumed_pct': round(float((wacc_base if archetype != "FINANCIALS_BANKING" else ke_base) * 100), 2),
             'hypothesis': base_hypo
         },
         'bull': {
             'probability': 0.25,
-            'fair_value': round(float(v_bull), 2),
+            'fair_value': v_bull,
             'growth_assumed_pct': round(float(g_bull if archetype != "FINANCIALS_BANKING" else (roe_bull*100)), 1),
             'wacc_assumed_pct': round(float((wacc_bull if archetype != "FINANCIALS_BANKING" else ke_bull) * 100), 2),
             'hypothesis': bull_hypo
         },
-        'expected_weighted_fair_value': round(float(ev_weighted), 2)
+        'expected_weighted_fair_value': ev_weighted
     }
 
 def run_monte_carlo(n_sims, start_fcf, shares, cash, debt, base_wacc, base_growth, fcf_volatility=0.025):
