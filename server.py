@@ -44,12 +44,22 @@ def config():
     return {**release_info(), "taller_url": destination if direct else "https://www.instagram.com/accionesargentinas/", "taller_label": "Ver Taller de Inversiones con IA" if direct else "Pedime información del Taller", "taller_note": "Abrís la información del Taller." if direct else "Abrís el perfil de @accionesargentinas en Instagram."}
 
 @app.get("/api/evaluate/{ticker}")
-def evaluate_stock(ticker: str):
+def evaluate_stock(ticker: str, manual_price: float = None, refresh: bool = False):
     try:
         symbol = normalize_ticker(ticker)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if manual_price is not None:
+        try:
+            return analyze_ticker(symbol, manual_price=manual_price)
+        except UnsupportedCompany as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ProviderUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     key = (MODEL_VERSION, symbol)
+    if refresh:
+        with _cache_lock:
+            CACHE.pop(key, None)
     with _condition:
         if key in _inflight:
             if not _condition.wait_for(lambda: key not in _inflight, timeout=65):

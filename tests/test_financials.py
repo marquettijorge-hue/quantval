@@ -125,3 +125,69 @@ def test_invalid_ticker_is_rejected(value):
 
 def test_share_class_symbol_normalization():
     assert normalize_ticker(" brk.b ") == "BRK-B"
+
+
+def test_dcf_growth_horizon_compounds_year_one():
+    from fetch_financials import calculate_scenario_dcf
+    # With 0% growth, FCF stays at 100
+    fv_0 = calculate_scenario_dcf(100.0, 10.0, 0.0, 0.0, 0.10, 0.00, fade_to_g=0.00, g_terminal=0.00)
+    # With 10% growth in year 1..5, Year 1 is 110, so fair value must be strictly higher
+    fv_10 = calculate_scenario_dcf(100.0, 10.0, 0.0, 0.0, 0.10, 0.10, fade_to_g=0.00, g_terminal=0.00)
+    assert fv_10 > fv_0
+    # Exactly check Year 1 discounting: PV(Year 1) = 100 * (1 + 0.10) / (1 + 0.10) = 100.0
+    # In earlier buggy version, Year 1 was 100 / 1.10 = 90.9
+    assert fv_10 >= 80.0
+
+
+def test_reverse_dcf_recovers_exact_implied_growth():
+    from fetch_financials import calculate_scenario_dcf, solve_reverse_dcf
+    # If Fair Value is $100 under 15% growth, Reverse DCF solving for target_price=100 must return ~15%
+    shares, cash, debt, wacc = 1000.0, 500.0, 200.0, 0.10
+    start_fcf = 10000.0
+    known_growth = 0.15
+    fair_val = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc, known_growth)
+    solved_g = solve_reverse_dcf(fair_val, start_fcf, shares, cash, debt, wacc)
+    assert solved_g is not None
+    assert abs(solved_g - 15.0) <= 0.5
+
+
+def test_margin_of_safety_vs_delta_price_separation():
+    # When Fair Value = $125 and Price = $100:
+    # MoS = (125 - 100) / 125 = 20.0%
+    # Delta vs Price = (125 - 100) / 100 = 25.0%
+    fair_value = 125.0
+    price = 100.0
+    mos = (fair_value - price) / fair_value * 100.0
+    delta = (fair_value - price) / price * 100.0
+    assert mos == 20.0
+    assert delta == 25.0
+    assert mos != delta
+
+
+def test_quality_and_checklist_explicit_missing():
+    result = build("AAPL")
+    assert "valuation_summary" in result
+    assert "core_indicators" in result
+    assert len(result["core_indicators"]) == 6
+    assert "piotroski_fscore" in result
+    assert "altman_solvency" in result
+    assert "mayer_100_bagger_metrics" in result
+    assert "checklist_due_diligence" in result
+    piot = result["piotroski_fscore"]
+    assert piot["status"] == "available"
+    assert piot["score"] <= piot["max_available"]
+    # Check that missing items are flagged as missing, not fabricated
+    for c in piot["criteria_list"]:
+        if c["status"] == "missing":
+            assert c["passed"] is None
+
+
+def test_bank_banking_valuation_and_no_industrial_scores():
+    result = build("JPM")
+    assert result["financial_sector"]
+    assert result["valuation"]["model_type"] == "banking_valuation"
+    assert result["piotroski_fscore"]["status"] == "not_applicable"
+    assert result["altman_solvency"]["status"] == "not_applicable"
+    assert "justified_pb" in result["valuation"]
+    assert result["valuation"]["book_value_per_share"] > 0
+

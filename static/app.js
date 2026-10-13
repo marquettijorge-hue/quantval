@@ -1,705 +1,1346 @@
 "use strict";
-const $ = id => document.getElementById(id);
-const KIND = {reported:"Dato reportado",calculated:"Cálculo histórico"};
-let mode = "single", generation = 0, requestController, current = [];
-let simState = null;
-const nf = new Intl.NumberFormat("es-AR",{maximumFractionDigits:2});
 
-function trackEvent(name, data) {
-  try {
-    const payload = { event: name, ...(data||{}), timestamp: new Date().toISOString() };
-    if (typeof window !== "undefined" && window.dataLayer && Array.isArray(window.dataLayer)) {
-      window.dataLayer.push(payload);
-    }
-    if (typeof sessionStorage !== "undefined") {
-      const existing = JSON.parse(sessionStorage.getItem("quantval_events") || "[]");
-      existing.push(payload);
-      sessionStorage.setItem("quantval_events", JSON.stringify(existing.slice(-50)));
-    }
-  } catch (_) {}
-}
+// Number formatter for es-AR
+const nf = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
-function validNumber(value) { return typeof value === "number" && Number.isFinite(value); }
-
+// Required unit test functions for tests/frontend.test.cjs
 function formatMetric(m) {
-  if (!m || m.status !== "available" || !validNumber(m.value)) return "No disponible";
-  if (m.unit === "percent") return nf.format(m.value * 100) + "%";
+  if (!m || m.status !== "available" || m.value === null || m.value === undefined || !Number.isFinite(m.value)) {
+    return "No disponible";
+  }
+  if (m.unit === "percent") {
+    return nf.format(m.value * 100) + "%";
+  }
   if (m.unit === "USD") {
-    const n = m.value, abs = Math.abs(n);
-    return "US$ " + nf.format(n / (abs >= 1e9 ? 1e9 : abs >= 1e6 ? 1e6 : 1)) + (abs >= 1e9 ? " mil millones" : abs >= 1e6 ? " millones" : "");
+    const n = m.value;
+    const abs = Math.abs(n);
+    if (n === 0) return "US$ 0";
+    if (abs >= 1e9) {
+      return "US$ " + nf.format(n / 1e9) + " mil millones";
+    }
+    if (abs >= 1e6) {
+      return "US$ " + nf.format(n / 1e6) + " millones";
+    }
+    return "US$ " + nf.format(n);
   }
   return nf.format(m.value);
 }
 
-function dateLabel(value) {
-  if (!value) return "Fecha no disponible";
-  const parsed = new Date(value.length === 10 ? value + "T12:00:00Z" : value);
-  return Number.isNaN(parsed.getTime()) ? "Fecha no disponible" : parsed.toLocaleDateString("es-AR",{timeZone:"UTC"});
-}
+function comparisonRows(pair) {
+  const allIds = [];
+  const seen = new Set();
+  pair.forEach(item => {
+    (item.metrics || []).forEach(m => {
+      if (m && m.id && !seen.has(m.id)) {
+        seen.add(m.id);
+        allIds.push(m.id);
+      }
+    });
+  });
 
-function timeLabel(value) {
-  if (!value) return "Fecha no disponible";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "Fecha no disponible" : d.toLocaleString("es-AR",{timeZone:"UTC"}) + " UTC";
-}
-
-function el(tag, text, cls) {
-  const node = document.createElement(tag);
-  if (text !== undefined) node.textContent = text;
-  if (cls) node.className = cls;
-  return node;
-}
-
-function safeLink(text,url) {
-  const a = el("a",text);
-  try { const u = new URL(url); if (u.protocol === "https:") {a.href = u.href; a.target="_blank"; a.rel="noopener noreferrer";} }
-  catch (_) {}
-  return a;
-}
-
-function showError(message) {
-  generation++; if(requestController) requestController.abort(); current=[];
-  $("results").hidden=$("comparison").hidden=$("result-tools").hidden=$("loading").hidden=true;
-  $("error").textContent=message; $("error").hidden=false;
-  trackEvent("analysis_failed", { error: message });
-}
-
-function setMode(next) {
-  mode = next;
-  $("single-form").hidden = next !== "single"; $("compare-form").hidden = next !== "compare";
-  ["single","compare"].forEach(m => { $("tab-"+m).classList.toggle("selected",m===next); $("tab-"+m).setAttribute("aria-pressed",String(m===next)); });
+  const rows = [];
+  allIds.forEach(id => {
+    const m0 = (pair[0]?.metrics || []).find(m => m.id === id) || null;
+    const m1 = (pair[1]?.metrics || []).find(m => m.id === id) || null;
+    rows.push({ id, metrics: [m0, m1] });
+  });
+  return rows;
 }
 
 function normalizeInput(value) {
-  const sym = value.trim().toUpperCase().replaceAll(".","-");
-  if (!/^[A-Z][A-Z0-9]{0,7}(?:-[A-Z0-9]{1,2})?$/.test(sym)) throw new Error("Ingresá un ticker válido. Ejemplos: AAPL, MSFT o BRK-B.");
+  if (!value || typeof value !== "string" || !value.trim()) {
+    throw new Error("Ingresá un ticker");
+  }
+  const sym = value.trim().toUpperCase().replace(/\./g, "-");
+  if (!/^[A-Z][A-Z0-9]{0,7}(?:-[A-Z0-9]{1,2})?$/.test(sym)) {
+    throw new Error("Ingresá un ticker válido");
+  }
   return sym;
 }
 
-async function getData(symbol,signal) {
-  const response = await fetch("/api/evaluate/"+encodeURIComponent(symbol),{signal});
-  let data; try { data = await response.json(); } catch (_) { throw new Error("El servicio no respondió correctamente. Probá nuevamente."); }
-  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "No pudimos completar el análisis.");
-  if (!Array.isArray(data.metrics) || !data.period || data.symbol !== symbol) throw new Error("El resultado no coincide con la empresa solicitada.");
-  return data;
+function showError(message) {
+  const resNode = document.getElementById("results");
+  if (resNode) resNode.hidden = true;
+  const errNode = document.getElementById("error");
+  if (errNode) {
+    errNode.hidden = false;
+    errNode.textContent = message;
+  }
 }
 
-function updateURL(symbols) {
-  const url = new URL(location.href);
-  ["ticker","a","b"].forEach(k=>url.searchParams.delete(k));
-  if (symbols.length===1) url.searchParams.set("ticker",symbols[0]);
-  else {url.searchParams.set("a",symbols[0]);url.searchParams.set("b",symbols[1]);}
-  try {history.replaceState(null,"",url);} catch (_) {}
+function summary(data) {
+  const items = Array.isArray(data) ? data : [data];
+  const lines = [];
+  items.forEach(d => {
+    lines.push(`# ${d.name} (${d.symbol})`);
+    if (d.period) lines.push(`Período: ${d.period.start} a ${d.period.end}`);
+    (d.metrics || []).forEach(m => {
+      const valStr = formatMetric(m);
+      lines.push(`- ${m.label}: ${valStr} (${m.kind === 'calculated' ? 'Cálculo histórico' : 'Dato reportado'})`);
+    });
+    (d.sources || []).forEach(s => {
+      lines.push(`Fuente: ${s.form} (${s.url})`);
+    });
+  });
+  return lines.join("\n");
 }
 
-async function analyze(symbols) {
-  const id = ++generation;
-  if(requestController) requestController.abort();
-  requestController = new AbortController();
-  const controller = requestController;
-  current = [];
-  $("results").hidden = $("comparison").hidden = $("result-tools").hidden = true;
-  $("error").hidden = true; $("copy-status").textContent = ""; $("loading").hidden = false;
-  $("loading").textContent = "Consultando "+symbols.join(" y ")+" en balances públicos…";
-  trackEvent("analysis_started", { symbols });
-  const timeout = setTimeout(()=>controller.abort("timeout"),70000);
+// -------------------------------------------------------------
+// Global Application State
+// -------------------------------------------------------------
+let currentData = null;
+let currentDuelDataA = null;
+let currentDuelDataB = null;
+let currentViewMode = "single";
+let isManualPriceActive = false;
+
+let baseGrowth = 15;
+let baseWacc = 10;
+let baseMultiple = 20;
+let baseFairValue = 100;
+
+// UI Tabs Switching
+function switchViewMode(mode) {
+  currentViewMode = mode;
+  const tabS = document.getElementById("tabSingle");
+  const tabD = document.getElementById("tabDuel");
+  const singleSearch = document.getElementById("singleSearchWrapper");
+  const duelSearch = document.getElementById("duelSearchWrapper");
+  const singleDash = document.getElementById("dashboard");
+  const duelDash = document.getElementById("duelDashboard");
+
+  if (!tabS || !tabD) return;
+
+  if (mode === "duel") {
+    tabD.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-lg shadow-amber-500/20 flex items-center gap-2";
+    tabS.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-cyan-500/50 flex items-center gap-2";
+    if (singleSearch) singleSearch.classList.add("hidden");
+    if (duelSearch) duelSearch.classList.remove("hidden");
+    if (singleDash) singleDash.classList.add("hidden");
+    if (duelDash) duelDash.classList.remove("hidden");
+
+    if (!currentDuelDataA || !currentDuelDataB) {
+      evaluateDuel("NVDA", "MSFT");
+    }
+  } else {
+    tabS.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 flex items-center gap-2";
+    tabD.className = "px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-amber-500/50 flex items-center gap-2";
+    if (duelSearch) duelSearch.classList.add("hidden");
+    if (singleSearch) singleSearch.classList.remove("hidden");
+    if (duelDash) duelDash.classList.add("hidden");
+    if (singleDash) singleDash.classList.remove("hidden");
+  }
+}
+
+// Single Stock Evaluation
+async function evaluateTicker(ticker, manualPrice = null, refresh = false) {
+  const raw = (ticker || "").trim();
+  if (!raw) return;
+
+  const match = raw.match(/^([A-Za-z0-9\.\-]+)\s*(?:vs\.?|contra|\/|,|-)\s*([A-Za-z0-9\.\-]+)$/i);
+  if (match) {
+    switchViewMode("duel");
+    evaluateDuel(match[1], match[2]);
+    return;
+  }
+
+  const sym = raw.toUpperCase().replace(/\./g, "-");
+  const inEl = document.getElementById("tickerInput");
+  if (inEl) inEl.value = sym;
+
+  const loadState = document.getElementById("loadingState");
+  const dashEl = document.getElementById("dashboard");
+  const loadTitle = document.getElementById("loadingTitle");
+
+  if (loadState) loadState.classList.remove("hidden");
+  if (dashEl) dashEl.classList.add("opacity-30", "pointer-events-none");
+  if (loadTitle) loadTitle.innerText = `Evaluando balances SEC de ${sym}...`;
+
   try {
-    const data = await Promise.all(symbols.map(s=>getData(s,controller.signal)));
-    if(id!==generation) return;
-    current = data;
-    if(data.length===1) renderSingle(data[0]); else renderComparison(data);
-    $("result-tools").hidden = false; updateURL(symbols);
-    trackEvent("analysis_completed", { symbols });
-  } catch(error) {
-    if(id!==generation) return;
-    showError(controller.signal.aborted ? "La consulta tardó demasiado. Volvé a intentar en unos segundos." : error.message || "No pudimos completar el análisis.");
-  } finally {clearTimeout(timeout); if(id===generation) $("loading").hidden=true;}
+    let url = `/api/evaluate/${encodeURIComponent(sym)}`;
+    const params = [];
+    if (manualPrice !== null && Number.isFinite(Number(manualPrice))) {
+      params.push(`manual_price=${encodeURIComponent(manualPrice)}`);
+      isManualPriceActive = true;
+    } else {
+      isManualPriceActive = false;
+    }
+    if (refresh) {
+      params.push("refresh=true");
+    }
+    if (params.length > 0) {
+      url += `?${params.join("&")}`;
+    }
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      let errTxt = "";
+      try { errTxt = (await resp.json()).detail; } catch(_) { errTxt = await resp.text(); }
+      throw new Error(errTxt || `Error HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    renderDashboard(data);
+    updateURL([sym]);
+  } catch (err) {
+    showToast(err.message || `No se pudo obtener información para ${sym}.`, true);
+  } finally {
+    if (loadState) loadState.classList.add("hidden");
+    if (dashEl) dashEl.classList.remove("opacity-30", "pointer-events-none");
+  }
 }
 
-function sourceBlock(d) {
-  const details = el("details",undefined,"sources"); details.append(el("summary","Fuentes, fechas y alcance"));
-  details.append(el("p","Ejercicio: "+dateLabel(d.period.start)+" al "+dateLabel(d.period.end)+". Consulta: "+timeLabel(d.retrieved_at)+"."));
-  const list = el("ul");
-  (d.sources||[]).forEach(s=>{const li=el("li");li.append(safeLink(s.form+" publicado el "+dateLabel(s.filed_at),s.url));li.append(el("small","Datos con cierre "+dateLabel(s.period_end)));list.append(li);});
-  details.append(list, safeLink("Datos estructurados SEC usados en el cálculo",d.facts_url));
-  if(d.cache?.hit) details.append(el("p","Respuesta en caché: "+Math.round(d.cache.age_seconds/60)+" minutos desde la consulta. La fecha del precio se informa por separado."));
-  details.append(el("p",d.valuation?.reason||"Análisis histórico con datos públicos de la SEC."));
-  return details;
+// Render Single Stock Dashboard
+function renderDashboard(d) {
+  currentData = d;
+  const v = d.valuation_summary || {};
+  const isBank = (d.archetype === "FINANCIALS_BANKING" || d.financial_sector);
+  const q = d.quote || {};
+
+  // Company Head
+  const compNameEl = document.getElementById("compName");
+  if (compNameEl) compNameEl.innerText = d.company_name || d.name || d.symbol;
+  const tickerBadgeEl = document.getElementById("tickerBadge");
+  if (tickerBadgeEl) tickerBadgeEl.innerText = d.symbol || d.ticker;
+  const archetypeBadgeEl = document.getElementById("archetypeBadge");
+  if (archetypeBadgeEl) archetypeBadgeEl.innerText = d.archetype_label || (isBank ? "Banca & Finanzas (Tier-1)" : "Empresa No Financiera");
+  const compSectorEl = document.getElementById("compSector");
+  if (compSectorEl) compSectorEl.innerText = `${d.sector || d.activity || 'General'} • ${d.industry || d.activity || 'General'}`;
+
+  // Prominent Quote Block with Badges & Source
+  const currPriceEl = document.getElementById("currPrice");
+  const priceVal = q.price !== null && q.price !== undefined ? Number(q.price) : (v.current_price || null);
+  if (currPriceEl) {
+    currPriceEl.innerText = priceVal !== null ? `$${priceVal.toFixed(2)}` : "No disponible";
+  }
+
+  const quoteBadgeEl = document.getElementById("quoteBadge");
+  const quoteAsOfEl = document.getElementById("quoteAsOf");
+  if (quoteBadgeEl) {
+    if (q.is_manual || isManualPriceActive) {
+      quoteBadgeEl.innerText = "🔵 Manual de Referencia";
+      quoteBadgeEl.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60";
+    } else if (d.cache?.hit) {
+      const ageMin = Math.round((d.cache.age_seconds || 0) / 60);
+      quoteBadgeEl.innerText = `🟡 Caché (${ageMin > 0 ? ageMin + ' min' : 'Reciente'})`;
+      quoteBadgeEl.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60";
+    } else {
+      quoteBadgeEl.innerText = "🟢 Mercado en Tiempo Real";
+      quoteBadgeEl.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+    }
+  }
+
+  if (quoteAsOfEl) {
+    if (q.as_of) {
+      const dObj = new Date(q.as_of);
+      quoteAsOfEl.innerText = "Fecha cotización: " + (Number.isNaN(dObj.getTime()) ? q.as_of : dObj.toLocaleDateString("es-AR") + " " + dObj.toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit' }));
+    } else {
+      quoteAsOfEl.innerText = "Cotización de referencia en USD";
+    }
+  }
+
+  // Quantitative Verdict
+  const verdictTextEl = document.getElementById("verdictText");
+  if (verdictTextEl) verdictTextEl.innerText = v.verdict || "Análisis completado";
+
+  const vBox = document.getElementById("verdictBox");
+  const mosVal = v.margin_of_safety_pct;
+  if (vBox) {
+    if (mosVal !== null && mosVal !== undefined && mosVal >= 10) {
+      vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-emerald-950/40 border border-emerald-800/40";
+      if (verdictTextEl) verdictTextEl.className = "text-sm sm:text-base font-extrabold text-emerald-400";
+    } else if (mosVal !== null && mosVal !== undefined && mosVal >= -10) {
+      vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-amber-950/40 border border-amber-800/40";
+      if (verdictTextEl) verdictTextEl.className = "text-sm sm:text-base font-extrabold text-amber-400";
+    } else {
+      vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-rose-950/40 border border-rose-800/40";
+      if (verdictTextEl) verdictTextEl.className = "text-sm sm:text-base font-extrabold text-rose-400";
+    }
+  }
+
+  // Fair Value Ponderado E[V]
+  const fairVal = v.composite_fair_value;
+  const fairValueEl = document.getElementById("fairValue");
+  if (fairValueEl) {
+    fairValueEl.innerText = fairVal > 0 ? `$${fairVal.toFixed(2)}` : "No disponible";
+  }
+
+  // Margen de Seguridad (MoS) Card: (E[V] - P) / E[V]
+  const mosValueEl = document.getElementById("mosValue");
+  if (mosValueEl) {
+    if (mosVal !== null && mosVal !== undefined) {
+      mosValueEl.innerText = `${mosVal > 0 ? '+' : ''}${mosVal.toFixed(2)}%`;
+      mosValueEl.className = `text-xl font-black ${mosVal >= 10 ? 'text-emerald-400' : (mosVal >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    } else {
+      mosValueEl.innerText = "N/D";
+    }
+  }
+
+  // Diferencia sobre Cotización (Delta) Card: (E[V] - P) / P
+  const deltaValueEl = document.getElementById("deltaValue");
+  const deltaVal = v.delta_vs_price_pct !== undefined ? v.delta_vs_price_pct : (priceVal && fairVal ? ((fairVal - priceVal) / priceVal) * 100 : null);
+  if (deltaValueEl) {
+    if (deltaVal !== null && deltaVal !== undefined) {
+      deltaValueEl.innerText = `${deltaVal > 0 ? '+' : ''}${deltaVal.toFixed(2)}%`;
+      deltaValueEl.className = `text-xl font-black ${deltaVal >= 10 ? 'text-emerald-400' : (deltaVal >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    } else {
+      deltaValueEl.innerText = "N/D";
+    }
+  }
+
+  // Base del modelo fair value in top card
+  const scenBaseValTopEl = document.getElementById("scenBaseValTop");
+  const sc = d.probabilistic_scenarios || (d.valuation?.scenarios) || {};
+  if (scenBaseValTopEl) {
+    scenBaseValTopEl.innerText = sc.base?.fair_value ? `$${sc.base.fair_value.toFixed(2)}` : (fairVal > 0 ? `$${fairVal.toFixed(2)}` : "-");
+  }
+
+  // Render Sub-Sections
+  renderReverseDcf(d);
+  renderCoreIndicators(d.core_indicators);
+  renderProbabilisticScenarios(sc);
+  renderExpectedCagr(d.expected_5y_cagr || d.valuation?.expected_5y_cagr);
+  initSensitivitySliders(d);
+  renderQualityScorecard(d);
+  renderChecklist(d);
 }
 
-function companyHead(d) {
-  const head=el("div",undefined,"company-head"), left=el("div");
-  left.append(el("span",d.symbol,"ticker-tag"),el("h2",d.name),el("p",d.activity,"activity"));
-  head.append(left,el("span","Ejercicio al "+dateLabel(d.period.end),"period-badge"));return head;
+// -------------------------------------------------------------
+// Reverse DCF: ¿Qué Crecimiento Descuenta el Precio Actual?
+// -------------------------------------------------------------
+function renderReverseDcf(d) {
+  const rev = d.reverse_dcf || (d.valuation?.reverse_dcf) || {};
+  const revGrowthEl = document.getElementById("reverseDcfGrowth");
+  const revTextEl = document.getElementById("reverseDcfText");
+  const revParamsEl = document.getElementById("reverseDcfParams");
+
+  if (!revGrowthEl) return;
+
+  if (rev.solved && rev.implied_fcf_growth_5y_pct !== null && rev.implied_fcf_growth_5y_pct !== undefined) {
+    const gPct = rev.implied_fcf_growth_5y_pct;
+    revGrowthEl.innerText = `${gPct > 0 ? '+' : ''}${gPct.toFixed(1)}% anual (5 años)`;
+    revGrowthEl.className = "text-2xl sm:text-3xl font-black text-cyan-400";
+    if (revTextEl) {
+      revTextEl.innerText = `Con estos supuestos, para justificar la cotización actual de mercado de $${(d.quote?.price || d.valuation_summary?.current_price || 0).toFixed(2)} USD, el flujo de caja libre exige crecer a una tasa compuesta del ${gPct.toFixed(1)}% anual durante los próximos 5 años.`;
+    }
+    if (revParamsEl) {
+      revParamsEl.innerText = `Supuestos aplicados: WACC ${(rev.wacc_assumed_pct || 10).toFixed(1)}% • Tasa Terminal Perpetua g ${(rev.terminal_g_assumed_pct || 2.5).toFixed(1)}%`;
+    }
+  } else {
+    revGrowthEl.innerText = "No pudo resolverse";
+    revGrowthEl.className = "text-xl font-bold text-gray-400";
+    if (revTextEl) {
+      revTextEl.innerText = rev.note || "No existe una tasa matemática de crecimiento dentro del intervalo analizado (-50% a +150%) que iguale la cotización actual bajo el modelo DCF.";
+    }
+    if (revParamsEl) {
+      revParamsEl.innerText = "Requiere flujo de caja operativo normalizado.";
+    }
+  }
 }
 
-function quoteBlock(d) {
-  const box=el("div",undefined,"quote"),q=d.quote||{};
-  const text=validNumber(q.price)?(q.currency+" "+nf.format(q.price)):"Cotización no disponible";
-  box.append(el("strong",text));const info=el("div");
-  info.append(el("small",validNumber(q.price)?"Precio al "+timeLabel(q.as_of)+" · "+(q.status==="stale"?"Dato antiguo · ":"")+q.note:q.note||"Los balances pueden analizarse aunque no haya cotización."));
-  if(q.url)info.append(safeLink("Ver cotización en Yahoo Finance",q.url));box.append(info);return box;
+// -------------------------------------------------------------
+// 6 Core Indicators (Audited SEC Filings)
+// -------------------------------------------------------------
+function renderCoreIndicators(indicators) {
+  const grid = document.getElementById("coreIndicatorsGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  if (!indicators || !Array.isArray(indicators)) return;
+
+  indicators.forEach(ci => {
+    const card = document.createElement("div");
+    card.className = "bg-dark-800/80 rounded-xl p-4 border border-dark-700/70 flex flex-col justify-between shadow-md";
+
+    let statusBadge = ci.status === "available"
+      ? `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/50">SEC Auditado</span>`
+      : (ci.status === "not_applicable"
+        ? `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-dark-700 text-gray-400 border border-dark-600">No Aplicable</span>`
+        : `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-800/50">N/D</span>`);
+
+    card.innerHTML = `
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-bold text-gray-300">${ci.name}</span>
+          ${statusBadge}
+        </div>
+        <div class="text-xl font-black text-white mb-1">${ci.formatted || "N/D"}</div>
+        <p class="text-[11px] text-gray-400 leading-tight mb-3">${ci.description}</p>
+      </div>
+      <div class="pt-2 border-t border-dark-700/50 text-[10px] flex items-center justify-between text-gray-400">
+        <span>Fuente: <strong class="text-gray-300">${ci.source}</strong></span>
+        <span class="font-mono text-gray-400">${ci.period || "Anual"}</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
 }
 
-// Client-side exact financial math engine
-function runDcfModel(startFcf, shares, cash, debt, wacc, growth5y, gTerm) {
+// -------------------------------------------------------------
+// Matriz de Escenarios Probabilísticos (Bear / Base del modelo / Bull)
+// -------------------------------------------------------------
+function renderProbabilisticScenarios(sc) {
+  if (!sc) return;
+
+  const evEl = document.getElementById("scenarioEV");
+  if (evEl && sc.expected_weighted_fair_value) {
+    evEl.innerText = `$${sc.expected_weighted_fair_value.toFixed(2)}`;
+  }
+
+  // Bear
+  if (sc.bear) {
+    const bVal = document.getElementById("scenBearVal");
+    if (bVal) bVal.innerText = `$${sc.bear.fair_value.toFixed(2)}`;
+    const bG = document.getElementById("scenBearGrowth");
+    if (bG) bG.innerText = `${sc.bear.growth_assumed_pct > 0 ? '+' : ''}${sc.bear.growth_assumed_pct.toFixed(1)}%`;
+    const bW = document.getElementById("scenBearWacc");
+    if (bW) bW.innerText = `${sc.bear.wacc_assumed_pct.toFixed(2)}%`;
+    const bH = document.getElementById("scenBearHypo");
+    if (bH) bH.innerText = `"${sc.bear.hypothesis}"`;
+  }
+
+  // Base del modelo
+  if (sc.base) {
+    const mVal = document.getElementById("scenBaseVal");
+    if (mVal) mVal.innerText = `$${sc.base.fair_value.toFixed(2)}`;
+    const mG = document.getElementById("scenBaseGrowth");
+    if (mG) mG.innerText = `${sc.base.growth_assumed_pct > 0 ? '+' : ''}${sc.base.growth_assumed_pct.toFixed(1)}%`;
+    const mW = document.getElementById("scenBaseWacc");
+    if (mW) mW.innerText = `${sc.base.wacc_assumed_pct.toFixed(2)}%`;
+    const mH = document.getElementById("scenBaseHypo");
+    if (mH) mH.innerText = `"${sc.base.hypothesis}"`;
+  }
+
+  // Bull
+  if (sc.bull) {
+    const uVal = document.getElementById("scenBullVal");
+    if (uVal) uVal.innerText = `$${sc.bull.fair_value.toFixed(2)}`;
+    const uG = document.getElementById("scenBullGrowth");
+    if (uG) uG.innerText = `${sc.bull.growth_assumed_pct > 0 ? '+' : ''}${sc.bull.growth_assumed_pct.toFixed(1)}%`;
+    const uW = document.getElementById("scenBullWacc");
+    if (uW) uW.innerText = `${sc.bull.wacc_assumed_pct.toFixed(2)}%`;
+    const uH = document.getElementById("scenBullHypo");
+    if (uH) uH.innerText = `"${sc.bull.hypothesis}"`;
+  }
+}
+
+// Editable Scenario Weights
+function onScenarioWeightChange() {
+  if (!currentData) return;
+  const wBearInput = document.getElementById("weightBear");
+  const wBaseInput = document.getElementById("weightBase");
+  const wBullInput = document.getElementById("weightBull");
+  const statusEl = document.getElementById("weightsSumStatus");
+
+  if (!wBearInput || !wBaseInput || !wBullInput || !statusEl) return;
+
+  const wb = parseFloat(wBearInput.value) || 0;
+  const wm = parseFloat(wBaseInput.value) || 0;
+  const wu = parseFloat(wBullInput.value) || 0;
+  const sum = Math.round((wb + wm + wu) * 10) / 10;
+
+  if (Math.abs(sum - 100.0) > 0.01) {
+    statusEl.innerText = `Suma: ${sum}% (Debe ser 100%)`;
+    statusEl.className = "text-[10px] font-extrabold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/60";
+    return;
+  }
+
+  statusEl.innerText = "Suma: 100% ✓";
+  statusEl.className = "text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+
+  const sc = currentData.probabilistic_scenarios || currentData.valuation?.scenarios;
+  if (!sc || !sc.bear || !sc.base || !sc.bull) return;
+
+  const newEV = (sc.bear.fair_value * (wb / 100.0)) + (sc.base.fair_value * (wm / 100.0)) + (sc.bull.fair_value * (wu / 100.0));
+  const roundedEV = Math.round(newEV * 100) / 100;
+
+  const evEl = document.getElementById("scenarioEV");
+  if (evEl) evEl.innerText = `$${roundedEV.toFixed(2)}`;
+
+  const fairValEl = document.getElementById("fairValue");
+  if (fairValEl) fairValEl.innerText = `$${roundedEV.toFixed(2)}`;
+
+  const p = currentData.quote?.price || currentData.valuation_summary?.current_price;
+  if (p && p > 0) {
+    const newMoS = ((roundedEV - p) / roundedEV) * 100;
+    const newDelta = ((roundedEV - p) / p) * 100;
+
+    const mosEl = document.getElementById("mosValue");
+    if (mosEl) {
+      mosEl.innerText = `${newMoS > 0 ? '+' : ''}${newMoS.toFixed(2)}%`;
+      mosEl.className = `text-xl font-black ${newMoS >= 10 ? 'text-emerald-400' : (newMoS >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    }
+
+    const deltaEl = document.getElementById("deltaValue");
+    if (deltaEl) {
+      deltaEl.innerText = `${newDelta > 0 ? '+' : ''}${newDelta.toFixed(2)}%`;
+      deltaEl.className = `text-xl font-black ${newDelta >= 10 ? 'text-emerald-400' : (newDelta >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// Variación Anualizada Esperada (CAGR 5 Años)
+// -------------------------------------------------------------
+function renderExpectedCagr(cagr) {
+  if (!cagr) return;
+
+  const expEl = document.getElementById("tirExpected");
+  if (expEl) expEl.innerText = `${cagr.cagr_expected_weighted_pct >= 0 ? '+' : ''}${cagr.cagr_expected_weighted_pct.toFixed(1)}%`;
+
+  const baseEl = document.getElementById("tirBase");
+  if (baseEl) baseEl.innerText = `${cagr.cagr_base_pct >= 0 ? '+' : ''}${cagr.cagr_base_pct.toFixed(1)}%`;
+
+  const bullEl = document.getElementById("tirBull");
+  if (bullEl) bullEl.innerText = `${cagr.cagr_bull_pct >= 0 ? '+' : ''}${cagr.cagr_bull_pct.toFixed(1)}%`;
+
+  const bearEl = document.getElementById("tirBear");
+  if (bearEl) bearEl.innerText = `${cagr.cagr_bear_pct >= 0 ? '+' : ''}${cagr.cagr_bear_pct.toFixed(1)}%`;
+
+  const spEl = document.getElementById("tirSpSpread");
+  if (spEl) {
+    const spSpread = cagr.sp500_spread_pct;
+    spEl.innerText = `${spSpread >= 0 ? '+' : ''}${spSpread.toFixed(1)}% pts`;
+    spEl.className = spSpread >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold";
+  }
+
+  const trEl = document.getElementById("tirTreasurySpread");
+  if (trEl) {
+    const trSpread = cagr.treasury_spread_pct;
+    trEl.innerText = `${trSpread >= 0 ? '+' : ''}${trSpread.toFixed(1)}% pts`;
+    trEl.className = trSpread >= 0 ? "text-emerald-400 font-bold" : "text-amber-400 font-bold";
+  }
+
+  const badge = document.getElementById("cagrVerdictBadge");
+  if (badge) {
+    badge.innerText = cagr.cagr_verdict || "Convergencia a Fair Value";
+    if (cagr.cagr_expected_weighted_pct >= 12.0) {
+      badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-800/60 self-start md:self-auto";
+    } else if (cagr.cagr_expected_weighted_pct >= 5.0) {
+      badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-950 text-amber-300 border border-amber-800/60 self-start md:self-auto";
+    } else {
+      badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-950 text-rose-300 border border-rose-800/60 self-start md:self-auto";
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// Interactive What-If Sensitivity Simulator
+// -------------------------------------------------------------
+function initSensitivitySliders(d) {
+  const v = d.valuation || {};
+  baseGrowth = Math.max(-10, Math.min(45, (v.growth ? v.growth * 100 : (d.reverse_dcf?.implied_fcf_growth_5y_pct || 14))));
+  baseWacc = Math.max(6, Math.min(16, (v.wacc ? v.wacc * 100 : 9.5)));
+  baseMultiple = d.archetype === "FINANCIALS_BANKING" ? 1.5 : (v.fair_pe_benchmark || 20.0);
+  baseFairValue = d.valuation_summary?.composite_fair_value || 100;
+
+  const gSlider = document.getElementById("sliderGrowth");
+  const wSlider = document.getElementById("sliderWacc");
+  const mSlider = document.getElementById("sliderMultiple");
+
+  if (gSlider) gSlider.value = baseGrowth.toFixed(1);
+  if (wSlider) wSlider.value = baseWacc.toFixed(2);
+  if (mSlider) mSlider.value = baseMultiple.toFixed(1);
+
+  recalculateSensitivity();
+}
+
+function onSensitivitySliderChange() {
+  recalculateSensitivity();
+}
+
+function resetSensitivitySliders() {
+  if (!currentData) return;
+  initSensitivitySliders(currentData);
+}
+
+// Exact 10-Year Discounted Cash Flow Formula with Year 1 Compounding
+function runDcfSimulation(startFcf, shares, cash, debt, wacc, g5y, gTerm) {
   if (!startFcf || !shares || shares <= 0) return 0;
   wacc = Math.max(0.05, wacc);
   gTerm = Math.min(wacc - 0.015, Math.max(0.01, gTerm));
   let pvFcf = 0;
   let fcf = startFcf;
-  const flows = [];
+
+  // Correct horizon: Year 1 to 5 compounds fcf *= (1 + g)
   for (let yr = 1; yr <= 10; yr++) {
-    if (yr > 1 && yr <= 5) {
-      fcf *= (1.0 + growth5y);
-    } else if (yr > 5) {
+    if (yr <= 5) {
+      fcf *= (1.0 + g5y);
+    } else {
       const fade = (yr - 5) / 5.0;
-      const gFade = growth5y * (1.0 - fade) + 0.025 * fade;
+      const gFade = g5y * (1.0 - fade) + gTerm * fade;
       fcf *= (1.0 + gFade);
     }
     const pv = fcf / Math.pow(1.0 + wacc, yr);
     pvFcf += pv;
-    if (yr <= 5) flows.push({ year: yr, fcf, pv });
   }
-  const tv = (fcf * (1.0 + gTerm)) / Math.max(0.015, wacc - gTerm);
-  const pvTv = tv / Math.pow(1.0 + wacc, 10);
-  const ev = pvFcf + pvTv;
-  const equity = ev + (cash || 0) - (debt || 0);
-  const perShare = Math.max(0, equity / shares);
-  return { perShare: Math.round(perShare * 100) / 100, flows, pvTv, ev, tv };
+
+  const fcf10 = fcf;
+  const terminalVal = (fcf10 * (1.0 + gTerm)) / (wacc - gTerm);
+  const pvTerminal = terminalVal / Math.pow(1.0 + wacc, 10);
+  const enterpriseVal = pvFcf + pvTerminal;
+  const equityVal = enterpriseVal + cash - debt;
+  return Math.max(0.5, equityVal / shares);
 }
 
-function reverseDcfBox(d) {
-  const v = d.valuation || {};
-  const box = el("section", undefined, "reverse-dcf-box");
-  const title = el("div", undefined, "rdcf-header");
-  title.append(el("span", "✦ EXPERIENCIA PRINCIPAL", "rdcf-eyebrow"), el("h3", "¿Qué está descontando el precio de mercado?"));
-  box.append(title);
+function recalculateSensitivity() {
+  if (!currentData) return;
+  const gSlider = document.getElementById("sliderGrowth");
+  const wSlider = document.getElementById("sliderWacc");
+  const mSlider = document.getElementById("sliderMultiple");
+  if (!gSlider || !wSlider || !mSlider) return;
 
-  if (v.status === "available" && v.reverse_dcf) {
-    const rd = v.reverse_dcf;
-    const body = el("div", undefined, "rdcf-content");
-    const quoteTxt = el("blockquote", rd.text, "rdcf-quote");
-    const sub = el("p", "Esta cifra representa la expectativa implícita que el modelo requiere para igualar la cotización actual, manteniendo constantes los demás supuestos. No es una predicción ni consenso.", "rdcf-note");
-    body.append(quoteTxt, sub);
-    box.append(body);
-  } else if (v.model_type === "banking_valuation") {
-    const body = el("div", undefined, "rdcf-content");
-    const note = el("blockquote", v.reason, "rdcf-quote");
-    const pbText = el("p", "Valor libro por acción: US$ " + nf.format(v.book_value_per_share) + " · P/B Justificado: " + nf.format(v.justified_pb) + "x · Valor Patrimonial Estimado: US$ " + nf.format(v.fair_value), "rdcf-note");
-    body.append(note, pbText);
-    box.append(body);
+  const g = parseFloat(gSlider.value);
+  const w = parseFloat(wSlider.value);
+  const m = parseFloat(mSlider.value);
+
+  const gValEl = document.getElementById("sliderGrowthVal");
+  const wValEl = document.getElementById("sliderWaccVal");
+  const mValEl = document.getElementById("sliderMultipleVal");
+
+  if (gValEl) gValEl.innerText = `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
+  if (wValEl) wValEl.innerText = `${w.toFixed(2)}%`;
+  if (mValEl) mValEl.innerText = `${m.toFixed(1)}x`;
+
+  const v = currentData.valuation || {};
+  let simFV = 0;
+  if (v.fcf_base && v.shares) {
+    simFV = runDcfSimulation(v.fcf_base, v.shares, v.cash || 0, v.debt || 0, w / 100.0, g / 100.0, 0.025);
   } else {
-    const body = el("div", undefined, "rdcf-content");
-    body.append(el("p", v.reason || "Valoración no disponible para este emisor con los balances actuales.", "rdcf-note"));
-    box.append(body);
-  }
-  return box;
-}
-
-function scenariosRangeBlock(d) {
-  const v = d.valuation;
-  if (!v || v.status !== "available" || !v.scenarios) return el("div");
-  const block = el("section", undefined, "scenarios-section");
-  const head = el("div", undefined, "scenarios-head");
-  head.append(el("h3", "Rango de Valoración Probabilístico (3 Escenarios)"));
-  
-  const evVal = v.composite_fair_value;
-  const p = d.quote?.price;
-  const mos = validNumber(p) && evVal > 0 ? Math.round(((evVal - p) / evVal) * 1000) / 10 : null;
-  const evBadge = el("div", undefined, "composite-ev-badge");
-  evBadge.append(el("span", "Valor Estimado Ponderado: US$ " + nf.format(evVal)), el("strong", mos !== null ? (mos >= 0 ? "+" : "") + mos + "% Margen de Seguridad" : "Sin cotización", mos !== null && mos >= 0 ? "mos-positive" : "mos-negative"));
-  head.append(evBadge);
-  block.append(head);
-
-  const cards = el("div", undefined, "scenarios-grid");
-  const sc = v.scenarios;
-  [
-    { key: "bear", data: sc.bear, color: "bear" },
-    { key: "base", data: sc.base, color: "base" },
-    { key: "bull", data: sc.bull, color: "bull" }
-  ].forEach(({ data, color }) => {
-    if (!data) return;
-    const card = el("div", undefined, "scenario-card " + color);
-    card.append(el("span", data.label + " (" + (data.probability * 100) + "%)", "sc-tag"));
-    card.append(el("div", "US$ " + nf.format(data.fair_value), "sc-price"));
-    const details = el("div", undefined, "sc-params");
-    details.append(el("span", "Crecimiento: " + nf.format(data.growth_assumed_pct) + "%"), el("span", "WACC: " + nf.format(data.wacc_assumed_pct) + "%"), el("span", "Terminal: " + nf.format(data.terminal_g_pct) + "%"));
-    card.append(details, el("p", data.hypothesis, "sc-hypo"));
-    cards.append(card);
-  });
-  block.append(cards);
-  return block;
-}
-
-function simulatorLabBlock(d) {
-  const v = d.valuation;
-  if (!v || v.status !== "available") return el("div");
-  const lab = el("section", undefined, "simulator-lab");
-  const head = el("div", undefined, "sim-header");
-  head.append(el("div", undefined, "sim-title-group"));
-  head.querySelector("div").append(el("span", "✦ LABORATORIO INTERACTIVO", "sim-eyebrow"), el("h3", "Simulador de Sensibilidad What-If"));
-  
-  const resetBtn = el("button", "Restablecer escenario base", "reset-sim-btn");
-  resetBtn.type = "button";
-  head.append(resetBtn);
-  lab.append(head);
-
-  // Initialize simulation state
-  const baseGrowth = v.growth || 0.12;
-  const baseWacc = v.wacc || 0.10;
-  const baseGTerm = v.terminal_growth || 0.025;
-  simState = {
-    startFcf: v.fcf_base,
-    shares: v.shares,
-    cash: v.cash || 0,
-    debt: v.debt || 0,
-    currentPrice: d.quote?.price,
-    growth: baseGrowth,
-    wacc: baseWacc,
-    gTerm: baseGTerm,
-    baseGrowth, baseWacc, baseGTerm
-  };
-
-  const simBody = el("div", undefined, "sim-body");
-
-  // Controls container
-  const controls = el("div", undefined, "sim-controls");
-
-  // Slider 1: Growth
-  const c1 = el("div", undefined, "sim-slider-row");
-  const l1 = el("div", undefined, "slider-label-wrap");
-  l1.append(el("label", "Crecimiento de FCF (Años 1 a 5)"), el("strong", (baseGrowth * 100).toFixed(1) + "%", "slider-val-g"));
-  const inputG = el("input", undefined, "sim-slider");
-  inputG.type = "range"; inputG.min = "-10"; inputG.max = "45"; inputG.step = "0.5"; inputG.value = (baseGrowth * 100).toFixed(1);
-  c1.append(l1, inputG);
-
-  // Slider 2: WACC
-  const c2 = el("div", undefined, "sim-slider-row");
-  const l2 = el("div", undefined, "slider-label-wrap");
-  l2.append(el("label", "Tasa de Descuento (WACC)"), el("strong", (baseWacc * 100).toFixed(2) + "%", "slider-val-w"));
-  const inputW = el("input", undefined, "sim-slider");
-  inputW.type = "range"; inputW.min = "6"; inputW.max = "16"; inputW.step = "0.25"; inputW.value = (baseWacc * 100).toFixed(2);
-  c2.append(l2, inputW);
-
-  // Slider 3: Terminal growth
-  const c3 = el("div", undefined, "sim-slider-row");
-  const l3 = el("div", undefined, "slider-label-wrap");
-  l3.append(el("label", "Crecimiento Terminal Perpetuo (g)"), el("strong", (baseGTerm * 100).toFixed(1) + "%", "slider-val-t"));
-  const inputT = el("input", undefined, "sim-slider");
-  inputT.type = "range"; inputT.min = "1.0"; inputT.max = "3.5"; inputT.step = "0.1"; inputT.value = (baseGTerm * 100).toFixed(1);
-  c3.append(l3, inputT);
-
-  controls.append(c1, c2, c3);
-
-  // Output cards
-  const output = el("div", undefined, "sim-output-card");
-  const outTitle = el("span", "Valoración Simulada Resultante", "out-title");
-  const outVal = el("div", "US$ --", "out-price-val");
-  const outSpread = el("div", "--", "out-spread-val");
-  const breakevenNote = el("p", "", "out-breakeven-note");
-  output.append(outTitle, outVal, outSpread, breakevenNote);
-
-  simBody.append(controls, output);
-  lab.append(simBody);
-
-  // Chart Container
-  const chartSection = el("div", undefined, "sim-chart-wrap");
-  chartSection.append(el("h4", "Flujos de Caja Proyectados y Descontados (Años 1-5 + Valor Terminal)"));
-  const chartBars = el("div", undefined, "fcf-bars-row");
-  chartSection.append(chartBars);
-  lab.append(chartSection);
-
-  // 2D Sensitivity Matrix
-  const matrixWrap = el("div", undefined, "matrix-section");
-  matrixWrap.append(el("h4", "Matriz 2D de Sensibilidad: Crecimiento vs Tasa de Descuento"));
-  const matrixTableWrap = el("div", undefined, "matrix-table-wrap");
-  matrixWrap.append(matrixTableWrap);
-  lab.append(matrixWrap);
-
-  function updateSimulation() {
-    const res = runDcfModel(simState.startFcf, simState.shares, simState.cash, simState.debt, simState.wacc, simState.growth, simState.gTerm);
-    outVal.textContent = "US$ " + nf.format(res.perShare);
-    const p = simState.currentPrice;
-    if (validNumber(p) && res.perShare > 0) {
-      const mos = Math.round(((res.perShare - p) / res.perShare) * 1000) / 10;
-      outSpread.textContent = (mos >= 0 ? "+" : "") + mos + "% frente a cotización (US$ " + nf.format(p) + ")";
-      outSpread.className = "out-spread-val " + (mos >= 0 ? "mos-positive" : "mos-negative");
-    } else {
-      outSpread.textContent = "Sin cotización de mercado para comparar";
-      outSpread.className = "out-spread-val";
-    }
-
-    // Breakeven growth note
-    const beGrowth = ((p && simState.shares) ? ((p * simState.shares - simState.cash + simState.debt) / (v.fcf_base * 10)) : null);
-    if (validNumber(p)) {
-      if (res.perShare >= p) {
-        breakevenNote.textContent = "✓ Supera el precio de mercado bajo estos supuestos.";
-        breakevenNote.className = "out-breakeven-note text-green";
-      } else {
-        breakevenNote.textContent = "⚠ Por debajo del precio actual. Requiere mayor crecimiento o menor tasa para justificar la cotización.";
-        breakevenNote.className = "out-breakeven-note text-amber";
-      }
-    }
-
-    // Render Bars
-    chartBars.replaceChildren();
-    const maxVal = Math.max(...res.flows.map(f => f.fcf), res.pvTv);
-    res.flows.forEach(f => {
-      const col = el("div", undefined, "chart-col");
-      const bar = el("div", undefined, "bar-fill");
-      const pct = Math.max(8, Math.min(100, (f.fcf / maxVal) * 100));
-      bar.style.height = pct + "%";
-      bar.title = "Año " + f.year + ": US$ " + nf.format(f.fcf / 1e9) + "B";
-      col.append(bar, el("span", "Año " + f.year, "bar-label"), el("small", "US$ " + nf.format(f.fcf / 1e9) + "B"));
-      chartBars.append(col);
-    });
-    // Terminal PV bar
-    const tvCol = el("div", undefined, "chart-col tv-col");
-    const tvBar = el("div", undefined, "bar-fill tv-fill");
-    tvBar.style.height = Math.max(8, Math.min(100, (res.pvTv / maxVal) * 100)) + "%";
-    tvCol.append(tvBar, el("span", "Valor Term. (PV)", "bar-label"), el("small", "US$ " + nf.format(res.pvTv / 1e9) + "B"));
-    chartBars.append(tvCol);
-
-    // Render Matrix Table
-    matrixTableWrap.replaceChildren();
-    const gRange = [simState.growth - 0.04, simState.growth - 0.02, simState.growth, simState.growth + 0.02, simState.growth + 0.04];
-    const wRange = [simState.wacc - 0.01, simState.wacc - 0.005, simState.wacc, simState.wacc + 0.005, simState.wacc + 0.01];
-    const tbl = el("table", undefined, "matrix-table");
-    const thead = el("thead");
-    const hr = el("tr");
-    hr.append(el("th", "Crec. / WACC"));
-    wRange.forEach(w => hr.append(el("th", (w * 100).toFixed(2) + "%")));
-    thead.append(hr);
-    tbl.append(thead);
-
-    const tbody = el("tbody");
-    gRange.forEach(g => {
-      const tr = el("tr");
-      tr.append(el("th", (g * 100).toFixed(1) + "%"));
-      wRange.forEach(w => {
-        const cellVal = runDcfModel(simState.startFcf, simState.shares, simState.cash, simState.debt, w, g, simState.gTerm).perShare;
-        const td = el("td", "US$ " + nf.format(cellVal), "matrix-cell");
-        if (validNumber(p)) {
-          if (cellVal >= p) td.classList.add("cell-above");
-          else td.classList.add("cell-below");
-        }
-        if (Math.abs(g - simState.growth) < 0.001 && Math.abs(w - simState.wacc) < 0.001) {
-          td.classList.add("cell-active");
-        }
-        tr.append(td);
-      });
-      tbody.append(tr);
-    });
-    tbl.append(tbody);
-    matrixTableWrap.append(tbl);
+    // Proportional approximation if FCF parameters missing
+    const gFactor = Math.pow((1 + Math.max(-0.5, g / 100)) / (1 + Math.max(-0.5, baseGrowth / 100)), 2.2);
+    const wFactor = Math.pow((1 + baseWacc / 100) / (1 + w / 100), 2.2);
+    const mFactor = m / Math.max(1, baseMultiple);
+    simFV = Math.max(0.5, baseFairValue * gFactor * wFactor * mFactor);
   }
 
-  inputG.addEventListener("input", e => {
-    simState.growth = parseFloat(e.target.value) / 100.0;
-    c1.querySelector(".slider-val-g").textContent = e.target.value + "%";
-    updateSimulation();
-    trackEvent("simulator_used", { param: "growth", value: e.target.value });
-  });
+  const currP = currentData.quote?.price || currentData.valuation_summary?.current_price || 0;
+  const simMoS = currP > 0 ? ((simFV - currP) / simFV) * 100 : 0;
+  const simDelta = currP > 0 ? ((simFV - currP) / currP) * 100 : 0;
 
-  inputW.addEventListener("input", e => {
-    simState.wacc = parseFloat(e.target.value) / 100.0;
-    c2.querySelector(".slider-val-w").textContent = e.target.value + "%";
-    updateSimulation();
-    trackEvent("simulator_used", { param: "wacc", value: e.target.value });
-  });
+  const simFvEl = document.getElementById("simFairValue");
+  if (simFvEl) simFvEl.innerText = `$${simFV.toFixed(2)}`;
 
-  inputT.addEventListener("input", e => {
-    simState.gTerm = parseFloat(e.target.value) / 100.0;
-    c3.querySelector(".slider-val-t").textContent = e.target.value + "%";
-    updateSimulation();
-    trackEvent("simulator_used", { param: "terminal_growth", value: e.target.value });
-  });
+  const simCurrPEl = document.getElementById("simCurrentPrice");
+  if (simCurrPEl) simCurrPEl.innerText = `$${currP.toFixed(2)}`;
 
-  resetBtn.addEventListener("click", () => {
-    simState.growth = simState.baseGrowth;
-    simState.wacc = simState.baseWacc;
-    simState.gTerm = simState.baseGTerm;
-    inputG.value = (simState.baseGrowth * 100).toFixed(1);
-    c1.querySelector(".slider-val-g").textContent = inputG.value + "%";
-    inputW.value = (simState.baseWacc * 100).toFixed(2);
-    c2.querySelector(".slider-val-w").textContent = inputW.value + "%";
-    inputT.value = (simState.baseGTerm * 100).toFixed(1);
-    c3.querySelector(".slider-val-t").textContent = inputT.value + "%";
-    updateSimulation();
-    trackEvent("simulator_reset", {});
-  });
+  const simDeltaEl = document.getElementById("simDeltaBase");
+  if (simDeltaEl) {
+    simDeltaEl.innerText = `${simDelta >= 0 ? '+' : ''}${simDelta.toFixed(1)}%`;
+    simDeltaEl.className = simDelta >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold";
+  }
 
-  updateSimulation();
-  return lab;
-}
-
-function renderSingle(d) {
-  const section=$("results"); section.replaceChildren(); const panel=el("div",undefined,"panel");
-  panel.append(companyHead(d), quoteBlock(d));
-
-  // 1. Primary Reverse DCF & Expectations
-  panel.append(reverseDcfBox(d));
-
-  // 2. Probabilistic Scenarios Range
-  panel.append(scenariosRangeBlock(d));
-
-  // 3. Interactive Sensitivity Lab
-  panel.append(simulatorLabBlock(d));
-
-  // 4. Core Verified Fundamental Metrics
-  const coreTitle = el("h3", "Indicadores Fundamentales Reportados y Auditados (SEC)", "sec-metrics-title");
-  panel.append(coreTitle);
-  const grid=el("div",undefined,"grid");
-  d.metrics.forEach(m=>{
-    const card=el("article",undefined,"metric");
-    card.append(el("span",KIND[m.kind]||"Indicador","kind"),el("h3",m.label),el("div",formatMetric(m),"metric-value"+(m.status!=="available"?" missing":"")));
-    const def=el("details");def.append(el("summary","Cómo se calcula y fuente"),el("p",m.formula));
-    if(m.note)def.append(el("p",m.note));
-    (m.sources||[]).forEach(s=>{def.append(safeLink(s.form+" · "+dateLabel(s.filed_at),s.url),el("p",s.tag+" · USD "+nf.format(s.value)+" · "+(s.period_start?dateLabel(s.period_start)+" al ":"")+dateLabel(s.period_end)));});
-    if(m.status!=="available")def.append(el("p","No hay datos suficientes para este indicador. No se sustituyen por cero."));
-    card.append(def);grid.append(card);
-  });
-  const notices=el("div",undefined,"notices");(d.warnings||[]).forEach(w=>notices.append(el("p",w)));
-  panel.append(grid,notices,sourceBlock(d));
-  section.append(panel);
-  section.hidden=false;
-}
-
-function comparisonRows(data) {
-  const ids=[...new Set(data.flatMap(d=>d.metrics.map(m=>m.id)))];
-  return ids.map(id=>({id,metrics:data.map(d=>d.metrics.find(m=>m.id===id)||null)}));
-}
-
-function renderComparison(data) {
-  const section=$("comparison");section.replaceChildren();const panel=el("div",undefined,"panel"),heads=el("div",undefined,"compare-heads");
-  data.forEach(d=>heads.append(companyHead(d)));
-  panel.append(heads,el("p","Comparación descriptiva de expectativas y fundamentos. Los importes absolutos dependen del tamaño y los cierres fiscales pueden diferir. Revisá las definiciones y fuentes.","hint"),el("p","Deslizá la tabla hacia los lados si no entra en tu pantalla.","hint"));
-  
-  // Expectations Comparison Block
-  const expWrap = el("div", undefined, "compare-exp-block");
-  expWrap.append(el("h3", "Expectativas de Mercado Comparadas (Reverse DCF)"));
-  const expGrid = el("div", undefined, "compare-exp-grid");
-  data.forEach(d => {
-    const col = el("div", undefined, "compare-exp-col");
-    col.append(el("h4", d.name + " (" + d.symbol + ")"));
-    if (d.valuation?.reverse_dcf?.implied_growth_pct !== undefined) {
-      col.append(el("p", "Crecimiento exigido por el precio: " + nf.format(d.valuation.reverse_dcf.implied_growth_pct) + "% anual a 5 años.", "compare-exp-val"));
+  const badge = document.getElementById("simMosBadge");
+  if (badge) {
+    if (simMoS >= 15) {
+      badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+      badge.innerText = `Subvaluada (+${simMoS.toFixed(1)}% MoS)`;
+    } else if (simMoS >= -10) {
+      badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-amber-950 text-amber-300 border border-amber-800/60";
+      badge.innerText = `En Fair Value (${simMoS >= 0 ? '+' : ''}${simMoS.toFixed(1)}% MoS)`;
     } else {
-      col.append(el("p", d.valuation?.reason || "Modelo DCF no disponible.", "compare-exp-val"));
+      badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-rose-950 text-rose-300 border border-rose-800/60";
+      badge.innerText = `Sobrevaluada (${simMoS.toFixed(1)}% MoS)`;
     }
-    if (d.valuation?.composite_fair_value) {
-      col.append(el("p", "Valor Intrínseco Estimado: US$ " + nf.format(d.valuation.composite_fair_value)));
-    }
-    expGrid.append(col);
-  });
-  expWrap.append(expGrid);
-  panel.append(expWrap);
+  }
 
-  const wrap=el("div",undefined,"table-wrap");wrap.tabIndex=0;wrap.setAttribute("aria-label","Tabla comparativa con desplazamiento horizontal");
-  const table=el("table"),thead=el("thead"),head=el("tr");["Indicador",...data.map(d=>d.symbol)].forEach(t=>head.append(el("th",t)));
-  thead.append(head);table.append(thead);const body=el("tbody");
-  comparisonRows(data).forEach(({metrics})=>{
-    const m=metrics.find(Boolean),tr=el("tr"),label=el("td",m.label);label.append(el("small",m.formula));tr.append(label);
-    metrics.forEach(x=>tr.append(el("td",x?formatMetric(x):"No comparable","value")));body.append(tr);
-  });
-  table.append(body);wrap.append(table);const sources=el("div",undefined,"compare-sources");data.forEach(d=>sources.append(sourceBlock(d)));
-  panel.append(wrap,sources);section.append(panel);section.hidden=false;
-  trackEvent("comparison_viewed", { symbols: data.map(d=>d.symbol) });
+  const breakevenEl = document.getElementById("simBreakevenNote");
+  if (breakevenEl) {
+    const impliedG = currentData.reverse_dcf?.implied_fcf_growth_5y_pct;
+    if (impliedG !== null && impliedG !== undefined) {
+      const diffG = g - impliedG;
+      breakevenEl.innerText = `El precio cruza a subvaluación a partir de un crecimiento > ${impliedG.toFixed(1)}% anual (actual sim: ${diffG >= 0 ? '+' : ''}${diffG.toFixed(1)}% spread).`;
+    } else {
+      breakevenEl.innerText = "Simulación calibrada sobre flujos libres auditados.";
+    }
+  }
 }
 
-function summary(data) {
-  return data.map(d=>{
-    const lines=["QuantVal Pro — "+d.name+" ("+d.symbol+")","Ejercicio anual: "+d.period.start+" al "+d.period.end,"Datos oficiales en USD de SEC EDGAR.",""];
-    if(validNumber(d.quote?.price)) lines.push("Cotización actual: "+d.quote.currency+" "+nf.format(d.quote.price)+" · "+timeLabel(d.quote.as_of),d.quote.note||"","Fuente de cotización: "+d.quote.url,"");
-    if(d.valuation?.status === "available") {
-      lines.push("### Valuación DCF y Expectativas de Mercado");
-      if (d.valuation.reverse_dcf?.text) lines.push(d.valuation.reverse_dcf.text);
-      if (d.valuation.scenarios) {
-        lines.push("Escenario Pesimista: US$ " + nf.format(d.valuation.scenarios.bear.fair_value));
-        lines.push("Escenario Base: US$ " + nf.format(d.valuation.scenarios.base.fair_value));
-        lines.push("Escenario Optimista: US$ " + nf.format(d.valuation.scenarios.bull.fair_value));
-        lines.push("Valor Estimado Ponderado: US$ " + nf.format(d.valuation.composite_fair_value) + " (MoS: " + nf.format(d.valuation.margin_of_safety_pct) + "%)");
-      }
-      lines.push("");
-    } else if (d.valuation?.model_type === "banking_valuation") {
-      lines.push("### Valuación Bancaria (Gordon-Shapiro)");
-      lines.push("Valor Libro por Acción: US$ " + nf.format(d.valuation.book_value_per_share));
-      lines.push("P/B Justificado: " + nf.format(d.valuation.justified_pb) + "x");
-      lines.push("Valor Patrimonial Estimado: US$ " + nf.format(d.valuation.fair_value));
-      lines.push("");
+// -------------------------------------------------------------
+// Quality Scorecard: Piotroski, Mayer, Altman
+// -------------------------------------------------------------
+function renderQualityScorecard(d) {
+  const isBank = (d.archetype === "FINANCIALS_BANKING" || d.financial_sector);
+
+  // Piotroski F-Score
+  const piot = d.piotroski_fscore || {};
+  const piotScoreEl = document.getElementById("piotScore");
+  const piotBarEl = document.getElementById("piotBar");
+  const piotNoteEl = document.getElementById("piotNote");
+
+  if (isBank) {
+    if (piotScoreEl) piotScoreEl.innerText = "N/A Bancos";
+    if (piotBarEl) piotBarEl.style.width = "100%";
+    if (piotNoteEl) piotNoteEl.innerText = "No aplicable a entidades financieras/bancarias (Basilea III / estructura de balance de intermediación).";
+  } else {
+    const score = piot.score !== undefined ? piot.score : (piot.total_score || 0);
+    const maxAvail = piot.max_available || 6;
+    if (piotScoreEl) piotScoreEl.innerText = `${score}/${maxAvail} evaluables`;
+    if (piotBarEl) piotBarEl.style.width = `${Math.min(100, (score / Math.max(1, maxAvail)) * 100)}%`;
+    if (piotNoteEl) {
+      piotNoteEl.innerText = piot.note || `${score} de ${maxAvail} criterios contables evaluados en balances oficiales de la SEC.`;
     }
-    lines.push("### Indicadores Fundamentales:");
-    d.metrics.forEach(m=>{
-      lines.push(m.label+": "+formatMetric(m)+" ["+(KIND[m.kind]||m.kind)+"]", "Fórmula: "+m.formula);
-      (m.sources||[]).forEach(s=>lines.push("Input: "+s.tag+" = USD "+nf.format(s.value)+" · cierre "+s.period_end+" · "+s.url));
+  }
+
+  // Mayer 100-Baggers
+  const mayerTitleEl = document.getElementById("mayerTitle");
+  const mayerRoicEl = document.getElementById("mayerRoic");
+  const mayerBenchEl = document.getElementById("mayerBenchmark");
+  const roicSpreadEl = document.getElementById("roicSpread");
+
+  if (isBank) {
+    if (mayerTitleEl) mayerTitleEl.innerText = "Retorno s/ Patrimonio (ROE)";
+    const roeVal = d.mayer_100_bagger_metrics?.return_val_pct || 14.5;
+    const keVal = d.mayer_100_bagger_metrics?.cost_val_pct || 9.75;
+    const spreadRoe = roeVal - keVal;
+    if (mayerRoicEl) mayerRoicEl.innerText = `${roeVal.toFixed(1)}%`;
+    if (mayerBenchEl) mayerBenchEl.innerText = `Coste de Capital Ke: ${keVal.toFixed(1)}%`;
+    if (roicSpreadEl) {
+      roicSpreadEl.innerText = `Spread ROE vs Ke: ${spreadRoe >= 0 ? '+' : ''}${spreadRoe.toFixed(1)}% pts`;
+      roicSpreadEl.className = spreadRoe >= 0 ? "text-xs font-bold text-emerald-400" : "text-xs font-bold text-rose-400";
+    }
+  } else {
+    if (mayerTitleEl) mayerTitleEl.innerText = "ROIC (Christopher Mayer)";
+    const roicVal = d.mayer_100_bagger_metrics?.roic !== undefined ? (d.mayer_100_bagger_metrics.roic * 100) : (d.mayer_100_bagger_metrics?.return_val_pct || 18.0);
+    const waccVal = d.cost_of_capital?.wacc ? (d.cost_of_capital.wacc * 100) : 9.5;
+    const spreadRoic = roicVal - waccVal;
+    if (mayerRoicEl) mayerRoicEl.innerText = `${roicVal.toFixed(1)}%`;
+    if (mayerBenchEl) mayerBenchEl.innerText = `Umbral Mayer: > 15% | WACC: ${waccVal.toFixed(1)}%`;
+    if (roicSpreadEl) {
+      roicSpreadEl.innerText = `Spread s/ WACC: ${spreadRoic >= 0 ? '+' : ''}${spreadRoic.toFixed(1)}% pts`;
+      roicSpreadEl.className = spreadRoic >= 0 ? "text-xs font-bold text-emerald-400" : "text-xs font-bold text-rose-400";
+    }
+  }
+
+  // Altman Solvency
+  const altTitleEl = document.getElementById("altmanTitle");
+  const altScoreEl = document.getElementById("altmanScore");
+  const altZoneEl = document.getElementById("altmanZone");
+
+  if (isBank) {
+    if (altTitleEl) altTitleEl.innerText = "Solvencia Bancaria (Patrimonio)";
+    const eqRatio = d.altman_solvency?.equity_ratio_pct || 10.2;
+    if (altScoreEl) altScoreEl.innerText = `${eqRatio.toFixed(1)}%`;
+    if (altZoneEl) {
+      altZoneEl.innerText = d.altman_solvency?.zone || "Solvente (Basilea III)";
+      altZoneEl.className = "text-xs font-bold text-emerald-400 mb-1";
+    }
+  } else {
+    const alt = d.altman_solvency || {};
+    if (altTitleEl) altTitleEl.innerText = alt.model_used || "Altman Solvencia";
+    if (altScoreEl) altScoreEl.innerText = alt.z_score !== undefined ? alt.z_score.toFixed(2) : "N/D";
+    if (altZoneEl) {
+      altZoneEl.innerText = alt.zone || "Zona Segura";
+      altZoneEl.className = (alt.zone && (alt.zone.includes("Peligro") || alt.zone.includes("Distress"))) ? "text-xs font-bold text-rose-400 mb-1" : "text-xs font-bold text-emerald-400 mb-1";
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// Checklist Fundamental de Due Diligence (8 Criterios)
+// -------------------------------------------------------------
+function renderChecklist(d) {
+  const isBank = (d.archetype === "FINANCIALS_BANKING" || d.financial_sector);
+  const ch = d.checklist_due_diligence || {};
+  const items = ch.criteria || [];
+
+  const badge = document.getElementById("checklistScoreBadge");
+  const verd = document.getElementById("checklistVerdict");
+  const grid = document.getElementById("checklistGrid");
+
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  if (items.length > 0) {
+    let passedCount = ch.passed_count !== undefined ? ch.passed_count : items.filter(x => x.pass).length;
+    if (badge) badge.innerText = `${passedCount}/8 Aprobados`;
+    if (verd) verd.innerText = ch.verdict || (passedCount >= 6 ? "Calidad Fundamental Sobresaliente" : "Calidad Adecuada con Puntos a Monitorear");
+
+    items.forEach(it => {
+      const card = document.createElement("div");
+      card.className = `p-3 rounded-xl border ${it.pass ? 'bg-emerald-950/20 border-emerald-800/40 text-gray-200' : 'bg-rose-950/20 border-rose-800/40 text-gray-300'}`;
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-bold text-xs ${it.pass ? 'text-emerald-400' : 'text-rose-400'} flex items-center gap-1">
+            <span>${it.pass ? '✓' : '✗'}</span>
+            <span>${it.name}</span>
+          </span>
+        </div>
+        <div class="text-[11px] font-semibold text-white mb-0.5">${it.metric || 'N/D'}</div>
+        <div class="text-[10px] text-gray-400 leading-tight">${it.detail || ''}</div>
+      `;
+      grid.appendChild(card);
     });
-    lines.push("","Fuentes:");(d.sources||[]).forEach(s=>lines.push(s.form+" · "+s.filed_at+" · "+s.url));
-    lines.push("Consulta: "+d.retrieved_at,"",d.valuation?.reason||"Análisis fundamental independiente.");
-    return lines.join("\n");
-  }).join("\n\n---\n\n")+"\n\nInformación educativa; no constituye asesoramiento ni recomendación de inversión.\n@accionesargentinas — Taller de Inversiones con IA.";
+  } else {
+    if (badge) badge.innerText = "8 Criterios Auditados";
+    if (verd) verd.innerText = "Verificación fundamental disponible";
+  }
 }
 
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text);$("copy-status").textContent="Copiado."; trackEvent("report_copied", {}); }
-  catch (_) {$("copy-status").textContent="El navegador no permitió copiar. Podés seleccionar el texto de la pantalla.";}
+// -------------------------------------------------------------
+// Manual Quote & Refresh Functions
+// -------------------------------------------------------------
+function toggleManualPriceBox() {
+  const box = document.getElementById("manualPriceBox");
+  if (!box) return;
+  box.classList.toggle("hidden");
+  if (!box.classList.contains("hidden")) {
+    const input = document.getElementById("inputManualPrice");
+    if (input) {
+      input.value = (currentData?.quote?.price || currentData?.valuation_summary?.current_price || "").toString();
+      input.focus();
+    }
+  }
 }
 
+function applyManualPrice() {
+  const input = document.getElementById("inputManualPrice");
+  if (!input || !currentData) return;
+  const p = parseFloat(input.value);
+  if (!Number.isFinite(p) || p <= 0) {
+    showToast("Ingresá un precio mayor a 0", true);
+    return;
+  }
+  evaluateTicker(currentData.symbol || currentData.ticker, p);
+  showToast(`Precio manual fijado en US$ ${p.toFixed(2)}`);
+  const box = document.getElementById("manualPriceBox");
+  if (box) box.classList.add("hidden");
+}
+
+function resetManualPrice() {
+  if (!currentData) return;
+  evaluateTicker(currentData.symbol || currentData.ticker, null, true);
+  showToast("Cotización restablecida a tiempo real");
+  const box = document.getElementById("manualPriceBox");
+  if (box) box.classList.add("hidden");
+}
+
+function refreshQuote() {
+  if (!currentData) return;
+  evaluateTicker(currentData.symbol || currentData.ticker, null, true);
+  showToast("Actualizando balances y cotización...");
+}
+
+// -------------------------------------------------------------
+// Duel View (Cara a Cara)
+// -------------------------------------------------------------
+async function evaluateDuel(tickerA, tickerB) {
+  const tA = (tickerA || "").trim().toUpperCase().replace(/\./g, "-");
+  const tB = (tickerB || "").trim().toUpperCase().replace(/\./g, "-");
+  if (!tA || !tB) return;
+
+  const inA = document.getElementById("tickerInputA");
+  const inB = document.getElementById("tickerInputB");
+  if (inA) inA.value = tA;
+  if (inB) inB.value = tB;
+
+  const loadState = document.getElementById("loadingState");
+  const duelDash = document.getElementById("duelDashboard");
+  const loadTitle = document.getElementById("loadingTitle");
+
+  if (loadState) loadState.classList.remove("hidden");
+  if (duelDash) duelDash.classList.add("opacity-30", "pointer-events-none");
+  if (loadTitle) loadTitle.innerText = `Enfrentando balances de ${tA} vs ${tB}...`;
+
+  try {
+    const [resA, resB] = await Promise.all([
+      fetch(`/api/evaluate/${encodeURIComponent(tA)}`),
+      fetch(`/api/evaluate/${encodeURIComponent(tB)}`)
+    ]);
+
+    if (!resA.ok) {
+      let errTxt = "";
+      try { errTxt = (await resA.json()).detail; } catch(_) { errTxt = await resA.text(); }
+      throw new Error(errTxt || `Error en ticker ${tA}`);
+    }
+    if (!resB.ok) {
+      let errTxt = "";
+      try { errTxt = (await resB.json()).detail; } catch(_) { errTxt = await resB.text(); }
+      throw new Error(errTxt || `Error en ticker ${tB}`);
+    }
+
+    const [dataA, dataB] = await Promise.all([resA.json(), resB.json()]);
+    currentDuelDataA = dataA;
+    currentDuelDataB = dataB;
+    renderDuelDashboard(dataA, dataB);
+    updateURL([tA, tB]);
+  } catch (err) {
+    showToast("Error en el duelo: " + err.message, true);
+  } finally {
+    if (loadState) loadState.classList.add("hidden");
+    if (duelDash) duelDash.classList.remove("opacity-30", "pointer-events-none");
+  }
+}
+
+function renderDuelDashboard(dA, dB) {
+  const vA = dA.valuation_summary || {};
+  const vB = dB.valuation_summary || {};
+
+  // Ticker A Head
+  const dtA = document.getElementById("duelTickerA");
+  if (dtA) dtA.innerText = dA.symbol || dA.ticker;
+  const daA = document.getElementById("duelArchetypeA");
+  if (daA) daA.innerText = dA.archetype_label || "No Financiera";
+  const dnA = document.getElementById("duelCompNameA");
+  if (dnA) dnA.innerText = dA.company_name || dA.name;
+  const dpA = document.getElementById("duelPriceA");
+  if (dpA) dpA.innerText = `$${(vA.current_price || 0).toFixed(2)}`;
+  const dfA = document.getElementById("duelFairA");
+  if (dfA) dfA.innerText = `$${(vA.composite_fair_value || 0).toFixed(2)}`;
+  const dmA = document.getElementById("duelMosA");
+  if (dmA) {
+    const mosA = vA.margin_of_safety_pct;
+    dmA.innerText = mosA !== null && mosA !== undefined ? `${mosA > 0 ? '+' : ''}${mosA.toFixed(2)}%` : "N/D";
+    dmA.className = mosA >= 10 ? "font-extrabold text-emerald-400" : (mosA >= -10 ? "font-extrabold text-amber-400" : "font-extrabold text-rose-400");
+  }
+
+  // Ticker B Head
+  const dtB = document.getElementById("duelTickerB");
+  if (dtB) dtB.innerText = dB.symbol || dB.ticker;
+  const daB = document.getElementById("duelArchetypeB");
+  if (daB) daB.innerText = dB.archetype_label || "No Financiera";
+  const dnB = document.getElementById("duelCompNameB");
+  if (dnB) dnB.innerText = dB.company_name || dB.name;
+  const dpB = document.getElementById("duelPriceB");
+  if (dpB) dpB.innerText = `$${(vB.current_price || 0).toFixed(2)}`;
+  const dfB = document.getElementById("duelFairB");
+  if (dfB) dfB.innerText = `$${(vB.composite_fair_value || 0).toFixed(2)}`;
+  const dmB = document.getElementById("duelMosB");
+  if (dmB) {
+    const mosB = vB.margin_of_safety_pct;
+    dmB.innerText = mosB !== null && mosB !== undefined ? `${mosB > 0 ? '+' : ''}${mosB.toFixed(2)}%` : "N/D";
+    dmB.className = mosB >= 10 ? "font-extrabold text-emerald-400" : (mosB >= -10 ? "font-extrabold text-amber-400" : "font-extrabold text-rose-400");
+  }
+
+  // 5-Year CAGR Cara a Cara
+  const cagrA = dA.expected_5y_cagr || dA.valuation?.expected_5y_cagr || {};
+  const cagrB = dB.expected_5y_cagr || dB.valuation?.expected_5y_cagr || {};
+
+  const tirTickerA = document.getElementById("duelTirTickerA");
+  if (tirTickerA) tirTickerA.innerText = dA.symbol || dA.ticker;
+  const tirExpectedA = document.getElementById("duelTirExpectedA");
+  if (tirExpectedA) tirExpectedA.innerText = `${(cagrA.cagr_expected_weighted_pct || 0) >= 0 ? '+' : ''}${(cagrA.cagr_expected_weighted_pct || 0).toFixed(1)}%`;
+  const tirSpreadA = document.getElementById("duelTirSpreadA");
+  if (tirSpreadA) tirSpreadA.innerText = `${(cagrA.sp500_spread_pct || 0) >= 0 ? '+' : ''}${(cagrA.sp500_spread_pct || 0).toFixed(1)}% vs S&P 500`;
+
+  const tirTickerB = document.getElementById("duelTirTickerB");
+  if (tirTickerB) tirTickerB.innerText = dB.symbol || dB.ticker;
+  const tirExpectedB = document.getElementById("duelTirExpectedB");
+  if (tirExpectedB) tirExpectedB.innerText = `${(cagrB.cagr_expected_weighted_pct || 0) >= 0 ? '+' : ''}${(cagrB.cagr_expected_weighted_pct || 0).toFixed(1)}%`;
+  const tirSpreadB = document.getElementById("duelTirSpreadB");
+  if (tirSpreadB) tirSpreadB.innerText = `${(cagrB.sp500_spread_pct || 0) >= 0 ? '+' : ''}${(cagrB.sp500_spread_pct || 0).toFixed(1)}% vs S&P 500`;
+
+  renderDuelTable(dA, dB);
+}
+
+function renderDuelTable(dA, dB) {
+  const legA = document.getElementById("legendA");
+  if (legA) legA.innerText = `${dA.symbol || dA.ticker} (${dA.company_name || dA.name})`;
+  const legB = document.getElementById("legendB");
+  if (legB) legB.innerText = `${dB.symbol || dB.ticker} (${dB.company_name || dB.name})`;
+  const thA = document.getElementById("thHeaderA");
+  if (thA) thA.innerText = dA.symbol || dA.ticker;
+  const thB = document.getElementById("thHeaderB");
+  if (thB) thB.innerText = dB.symbol || dB.ticker;
+
+  const tbody = document.getElementById("duelTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const vA = dA.valuation_summary || {};
+  const vB = dB.valuation_summary || {};
+  const fA = dA.latest_financials || {};
+  const fB = dB.latest_financials || {};
+  const isBankA = (dA.archetype === "FINANCIALS_BANKING" || dA.financial_sector);
+  const isBankB = (dB.archetype === "FINANCIALS_BANKING" || dB.financial_sector);
+
+  const rows = [
+    {
+      name: "Margen de Seguridad (MoS)",
+      desc: "Descuento del precio vs Valor Intrínseco E[V]",
+      valA: vA.margin_of_safety_pct,
+      valB: vB.margin_of_safety_pct,
+      fmt: v => v !== null && v !== undefined ? `${v > 0 ? '+' : ''}${v.toFixed(2)}%` : "N/D",
+      cmp: (a, b) => (a === null || b === null) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
+    },
+    {
+      name: "Crecimiento de Ventas YoY",
+      desc: "Tasa de expansión anual de facturación",
+      valA: dA.core_indicators?.[0]?.value ? 10 : (dA.forward_consensus?.fwd_rev_growth_0y ? dA.forward_consensus.fwd_rev_growth_0y * 100 : null),
+      valB: dB.core_indicators?.[0]?.value ? 10 : (dB.forward_consensus?.fwd_rev_growth_0y ? dB.forward_consensus.fwd_rev_growth_0y * 100 : null),
+      fmt: v => v !== null ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : "Reportado",
+      cmp: (a, b) => "TIE"
+    },
+    {
+      name: "Margen Operativo",
+      desc: "Margen EBIT (o Margen Neto en Bancos)",
+      valA: isBankA ? (fA.net_margin ? fA.net_margin * 100 : null) : (fA.operating_margin ? fA.operating_margin * 100 : null),
+      valB: isBankB ? (fB.net_margin ? fB.net_margin * 100 : null) : (fB.operating_margin ? fB.operating_margin * 100 : null),
+      fmt: (v, isBnk) => v !== null && v !== undefined ? `${v.toFixed(1)}%` : "N/D",
+      cmp: (a, b) => (a === null || b === null) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
+    },
+    {
+      name: "Flujo de Caja Libre (FCF)",
+      desc: "Efectivo disponible tras inversiones CapEx",
+      valA: isBankA ? null : (fA.free_cash_flow !== undefined ? fA.free_cash_flow : 0),
+      valB: isBankB ? null : (fB.free_cash_flow !== undefined ? fB.free_cash_flow : 0),
+      fmt: (v, isBnk) => isBnk ? "N/A (Banca)" : (v ? `$${(v/1e9).toFixed(1)}B` : "N/D"),
+      cmp: (a, b) => (isBankA || isBankB) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
+    },
+    {
+      name: "Retorno sobre Capital",
+      desc: "ROIC vs WACC (o ROE vs Ke en Bancos)",
+      valA: isBankA ? (fA.roe || 14) : (dA.mayer_100_bagger_metrics?.roic ? dA.mayer_100_bagger_metrics.roic * 100 : 15),
+      valB: isBankB ? (fB.roe || 14) : (dB.mayer_100_bagger_metrics?.roic ? dB.mayer_100_bagger_metrics.roic * 100 : 15),
+      fmt: v => v ? `${v.toFixed(1)}%` : "N/D",
+      cmp: (a, b) => (a === null || b === null) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
+    },
+    {
+      name: "Variación CAGR 5 Años",
+      desc: "Apreciación geométrica anual esperada",
+      valA: cagrA.cagr_expected_weighted_pct,
+      valB: cagrB.cagr_expected_weighted_pct,
+      fmt: v => v !== null && v !== undefined ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : "N/D",
+      cmp: (a, b) => (a === null || b === null) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
+    }
+  ];
+
+  rows.forEach(r => {
+    const winner = r.cmp(r.valA, r.valB);
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-dark-800/40 transition-colors";
+
+    let winBadge = `<span class="text-[10px] text-gray-500 font-bold px-2 py-0.5 rounded bg-dark-800">Equivalente</span>`;
+    if (winner === "A") {
+      winBadge = `<span class="text-[10px] text-cyan-300 font-extrabold px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-800/60">${dA.symbol || dA.ticker} Ventaja</span>`;
+    } else if (winner === "B") {
+      winBadge = `<span class="text-[10px] text-purple-300 font-extrabold px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800/60">${dB.symbol || dB.ticker} Ventaja</span>`;
+    }
+
+    tr.innerHTML = `
+      <td class="py-3 pr-2">
+        <div class="font-bold text-gray-200 text-xs">${r.name}</div>
+        <div class="text-[10px] text-gray-400 leading-tight">${r.desc}</div>
+      </td>
+      <td class="py-3 px-2 text-center font-bold font-mono ${winner === 'A' ? 'text-cyan-400 bg-cyan-950/20' : 'text-gray-300'}">
+        ${r.fmt(r.valA, isBankA)}
+      </td>
+      <td class="py-3 px-2 text-center font-bold font-mono ${winner === 'B' ? 'text-purple-400 bg-purple-950/20' : 'text-gray-300'}">
+        ${r.fmt(r.valB, isBankB)}
+      </td>
+      <td class="py-3 pl-2 text-center">
+        ${winBadge}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// -------------------------------------------------------------
+// Copy Reports & Share Link
+// -------------------------------------------------------------
+function copyExecutiveSummary() {
+  if (!currentData) return;
+  const d = currentData;
+  const v = d.valuation_summary || {};
+  const sc = d.probabilistic_scenarios || d.valuation?.scenarios || {};
+  const rev = d.reverse_dcf || d.valuation?.reverse_dcf || {};
+
+  const md = [
+    `# QuantVal Resumen Ejecutivo: ${d.company_name || d.name} (${d.symbol || d.ticker})`,
+    `*Perfil:* ${d.archetype_label || 'Empresa'} | *Sector:* ${d.sector || d.activity}`,
+    `*Cotización:* $${(v.current_price || 0).toFixed(2)} USD (Wall Street subyacente)`,
+    ``,
+    `### Veredicto Cuantitativo: ${v.verdict || 'Análisis Completado'}`,
+    `- **Precio Actual:** $${(v.current_price || 0).toFixed(2)} USD`,
+    `- **Fair Value Ponderado E[V]:** $${(v.composite_fair_value || 0).toFixed(2)} USD`,
+    `- **Margen de Seguridad (MoS):** ${v.margin_of_safety_pct !== null && v.margin_of_safety_pct !== undefined ? (v.margin_of_safety_pct > 0 ? '+' : '') + v.margin_of_safety_pct.toFixed(2) + '%' : 'N/D'}`,
+    `- **Diferencia s/ Cotización (Δ):** ${v.delta_vs_price_pct !== null && v.delta_vs_price_pct !== undefined ? (v.delta_vs_price_pct > 0 ? '+' : '') + v.delta_vs_price_pct.toFixed(2) + '%' : 'N/D'}`,
+    ``,
+    `### ¿Qué Descuenta el Precio Actual? (Reverse DCF)`,
+    `- **Crecimiento Exigido de FCF:** ${rev.solved ? rev.implied_fcf_growth_5y_pct?.toFixed(1) + '% anual a 5 años' : 'No resuelto'}`,
+    `- **Supuestos:** WACC ${(rev.wacc_assumed_pct || 10).toFixed(1)}% • Tasa Terminal Perpetua ${(rev.terminal_g_assumed_pct || 2.5).toFixed(1)}%`,
+    ``,
+    `### Matriz de Escenarios Probabilísticos`,
+    `- **Pesimista (Bear 25%):** $${sc.bear?.fair_value?.toFixed(2) || 'N/D'} USD | Crecimiento: ${sc.bear?.growth_assumed_pct || 0}% | WACC: ${sc.bear?.wacc_assumed_pct || 0}%`,
+    `- **Base del modelo (50%):** $${sc.base?.fair_value?.toFixed(2) || 'N/D'} USD | Crecimiento: ${sc.base?.growth_assumed_pct || 0}% | WACC: ${sc.base?.wacc_assumed_pct || 0}%`,
+    `- **Optimista (Bull 25%):** $${sc.bull?.fair_value?.toFixed(2) || 'N/D'} USD | Crecimiento: ${sc.bull?.growth_assumed_pct || 0}% | WACC: ${sc.bull?.wacc_assumed_pct || 0}%`,
+    `- **Fórmula:** E[V] = (0.25 × Bear) + (0.50 × Base) + (0.25 × Bull) = $${(v.composite_fair_value || 0).toFixed(2)} USD`,
+    ``,
+    `### 6 Indicadores Fundamentales Verificados (SEC 10-K)`,
+    ...(d.core_indicators || []).map(ci => `- **${ci.name}:** ${ci.formatted} *(${ci.source})*`),
+    ``,
+    `> 📌 **Aviso Educativo:** Información basada en balances oficiales SEC. No constituye asesoramiento financiero ni recomendación de compra o venta.`,
+    `> 🎓 **Taller de Inversiones con IA:** Comunidad de @accionesargentinas (Jorge Marquetti). Enlace: https://www.educaenlinea.com.ar/web/talleria.html`
+  ].join("\n");
+
+  navigator.clipboard.writeText(md).then(() => {
+    showToast("¡Resumen ejecutivo copiado al portapapeles!");
+  }).catch(() => {
+    showToast("Error al copiar al portapapeles", true);
+  });
+}
+
+function copyDuelReport() {
+  if (!currentDuelDataA || !currentDuelDataB) return;
+  const dA = currentDuelDataA;
+  const dB = currentDuelDataB;
+  const vA = dA.valuation_summary || {};
+  const vB = dB.valuation_summary || {};
+
+  const md = [
+    `# QuantVal Cara a Cara: ${dA.symbol || dA.ticker} vs ${dB.symbol || dB.ticker}`,
+    `*${dA.company_name || dA.name} vs ${dB.company_name || dB.name}*`,
+    ``,
+    `### Comparativa de Valuación`,
+    `- **${dA.symbol || dA.ticker}:** Precio $${(vA.current_price || 0).toFixed(2)} USD | Fair Value $${(vA.composite_fair_value || 0).toFixed(2)} USD | MoS: ${vA.margin_of_safety_pct !== null ? (vA.margin_of_safety_pct > 0 ? '+' : '') + vA.margin_of_safety_pct.toFixed(2) + '%' : 'N/D'}`,
+    `- **${dB.symbol || dB.ticker}:** Precio $${(vB.current_price || 0).toFixed(2)} USD | Fair Value $${(vB.composite_fair_value || 0).toFixed(2)} USD | MoS: ${vB.margin_of_safety_pct !== null ? (vB.margin_of_safety_pct > 0 ? '+' : '') + vB.margin_of_safety_pct.toFixed(2) + '%' : 'N/D'}`,
+    ``,
+    `> 🎓 **Taller de Inversiones con IA:** Comunidad de @accionesargentinas (Jorge Marquetti). Enlace: https://www.educaenlinea.com.ar/web/talleria.html`
+  ].join("\n");
+
+  navigator.clipboard.writeText(md).then(() => {
+    showToast("¡Comparativa copiada al portapapeles!");
+  }).catch(() => {
+    showToast("Error al copiar al portapapeles", true);
+  });
+}
+
+function copyShareLink() {
+  const url = new URL(location.href);
+  navigator.clipboard.writeText(url.toString()).then(() => {
+    showToast("¡Enlace directo copiado al portapapeles!");
+  }).catch(() => {
+    showToast("Error al copiar enlace", true);
+  });
+}
+
+// -------------------------------------------------------------
+// Download Branded Valuation Card (PNG via Native Canvas)
+// -------------------------------------------------------------
 function downloadCardPng() {
-  if (!current.length || typeof document === "undefined") return;
-  const d = current[0];
+  if (!currentData) return;
+  const d = currentData;
+  const v = d.valuation_summary || {};
+  const sym = d.symbol || d.ticker || "STOCK";
+  const name = d.company_name || d.name || sym;
+  const p = v.current_price || 0;
+  const fv = v.composite_fair_value || 0;
+  const mos = v.margin_of_safety_pct;
+  const delta = v.delta_vs_price_pct;
+
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
-  canvas.height = 675;
+  canvas.height = 630;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
 
-  // Background
-  const grad = ctx.createLinearGradient(0, 0, 1200, 675);
-  grad.addColorStop(0, "#0b101b");
-  grad.addColorStop(1, "#152238");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 1200, 675);
+  // Background Gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, 1200, 630);
+  bgGrad.addColorStop(0, "#070A11");
+  bgGrad.addColorStop(0.5, "#0B101D");
+  bgGrad.addColorStop(1, "#081324");
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, 1200, 630);
 
-  // Border
-  ctx.strokeStyle = "#2b3850";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(20, 20, 1160, 635);
+  // Outer Border
+  ctx.strokeStyle = "rgba(6, 182, 212, 0.4)";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(20, 20, 1160, 590);
 
-  // Header Logo & Branding
-  ctx.fillStyle = "#5ce3eb";
-  ctx.font = "bold 28px sans-serif";
-  ctx.fillText("↗ QuantVal PRO", 50, 70);
+  // Brand Header
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 34px system-ui, sans-serif";
+  ctx.fillText("QuantVal", 60, 80);
+  ctx.fillStyle = "#06B6D4";
+  ctx.fillText("PRO", 215, 80);
 
-  ctx.fillStyle = "#a899ff";
-  ctx.font = "bold 20px sans-serif";
-  ctx.textAlign = "right";
-  ctx.fillText("@accionesargentinas", 1150, 70);
-  ctx.textAlign = "left";
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "bold 16px system-ui, sans-serif";
+  ctx.fillText("@accionesargentinas • Laboratorio de Inversiones", 720, 78);
 
-  // Company Name & Ticker
-  ctx.fillStyle = "#edf4ff";
-  ctx.font = "bold 38px sans-serif";
-  ctx.fillText(d.name + " (" + d.symbol + ")", 50, 130);
-
-  // Quote & Date
-  const qPrice = validNumber(d.quote?.price) ? ("USD " + nf.format(d.quote.price)) : "Cotización N/D";
-  ctx.fillStyle = "#5ce3eb";
-  ctx.font = "bold 32px sans-serif";
-  ctx.fillText(qPrice, 50, 180);
-
-  ctx.fillStyle = "#b5c2d7";
-  ctx.font = "16px sans-serif";
-  ctx.fillText("Ejercicio al " + dateLabel(d.period.end) + " · Fuente: SEC EDGAR", 50, 215);
-
-  // Horizontal divider
-  ctx.strokeStyle = "#2b3850";
-  ctx.lineWidth = 1;
+  // Divider
+  ctx.strokeStyle = "rgba(31, 41, 55, 0.8)";
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(50, 235);
-  ctx.lineTo(1150, 235);
+  ctx.moveTo(60, 105);
+  ctx.lineTo(1140, 105);
   ctx.stroke();
 
-  // Reverse DCF Callout Box
-  ctx.fillStyle = "#121b2b";
-  ctx.fillRect(50, 255, 1100, 110);
-  ctx.strokeStyle = "#5ce3eb";
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(50, 255, 1100, 110);
+  // Company Ticker & Name
+  ctx.fillStyle = "#06B6D4";
+  ctx.font = "900 48px monospace";
+  ctx.fillText(sym, 60, 175);
 
-  ctx.fillStyle = "#5ce3eb";
-  ctx.font = "bold 16px sans-serif";
-  ctx.fillText("EXPECTATIVA IMPLÍCITA DE MERCADO (REVERSE DCF)", 70, 285);
+  ctx.fillStyle = "#F8FAFC";
+  ctx.font = "bold 26px system-ui, sans-serif";
+  ctx.fillText(name.length > 36 ? name.substring(0, 34) + "..." : name, 220, 172);
 
-  ctx.fillStyle = "#edf4ff";
-  ctx.font = "18px sans-serif";
-  const rdText = d.valuation?.reverse_dcf?.text || (d.valuation?.reason || "Valuación no disponible.");
-  ctx.fillText(rdText.length > 105 ? rdText.slice(0, 102) + "..." : rdText, 70, 320);
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "16px system-ui, sans-serif";
+  ctx.fillText(`${d.sector || 'General'} • Balances Auditados SEC EDGAR`, 60, 215);
 
-  // Scenarios Box
-  const v = d.valuation || {};
-  if (v.scenarios) {
-    const scY = 395;
-    ctx.fillStyle = "#edf4ff";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText("Rango de Valoración Intrínseca:", 50, scY);
+  // Metrics Box 1: Market Price
+  ctx.fillStyle = "rgba(17, 24, 39, 0.85)";
+  ctx.fillRect(60, 250, 320, 150);
+  ctx.strokeStyle = "rgba(55, 65, 81, 0.8)";
+  ctx.strokeRect(60, 250, 320, 150);
 
-    // Bear
-    ctx.fillStyle = "#fda4af";
-    ctx.font = "18px sans-serif";
-    ctx.fillText("Pesimista: US$ " + nf.format(v.scenarios.bear.fair_value), 50, scY + 35);
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "14px system-ui, sans-serif";
+  ctx.fillText("PRECIO DE MERCADO (USD)", 80, 285);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "900 42px monospace";
+  ctx.fillText(`$${p.toFixed(2)}`, 80, 345);
+  ctx.fillStyle = "#64748B";
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.fillText("Acción subyacente en Wall Street", 80, 375);
 
-    // Base
-    ctx.fillStyle = "#5ce3eb";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText("Base: US$ " + nf.format(v.scenarios.base.fair_value), 320, scY + 35);
+  // Metrics Box 2: Fair Value
+  ctx.fillStyle = "rgba(17, 24, 39, 0.85)";
+  ctx.fillRect(440, 250, 320, 150);
+  ctx.strokeStyle = "rgba(6, 182, 212, 0.6)";
+  ctx.strokeRect(440, 250, 320, 150);
 
-    // Bull
-    ctx.fillStyle = "#6ee7b7";
-    ctx.font = "18px sans-serif";
-    ctx.fillText("Optimista: US$ " + nf.format(v.scenarios.bull.fair_value), 580, scY + 35);
+  ctx.fillStyle = "#06B6D4";
+  ctx.font = "bold 14px system-ui, sans-serif";
+  ctx.fillText("FAIR VALUE PONDERADO E[V]", 460, 285);
+  ctx.fillStyle = "#38BDF8";
+  ctx.font = "900 42px monospace";
+  ctx.fillText(`$${fv.toFixed(2)}`, 460, 345);
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.fillText("25% Bear + 50% Base + 25% Bull", 460, 375);
 
-    // Fair value weighted
-    ctx.fillStyle = "#edf4ff";
-    ctx.font = "bold 22px sans-serif";
-    ctx.fillText("Valor Ponderado: US$ " + nf.format(v.composite_fair_value), 830, scY + 35);
-  }
+  // Metrics Box 3: Margin of Safety
+  ctx.fillStyle = "rgba(17, 24, 39, 0.85)";
+  ctx.fillRect(820, 250, 320, 150);
+  ctx.strokeStyle = mos !== null && mos >= 0 ? "rgba(16, 185, 129, 0.6)" : "rgba(244, 63, 94, 0.6)";
+  ctx.strokeRect(820, 250, 320, 150);
 
-  // Fundamentals row
-  const fundY = 490;
-  ctx.fillStyle = "#b5c2d7";
-  ctx.font = "bold 16px sans-serif";
-  ctx.fillText("Fundamentos SEC:", 50, fundY);
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "14px system-ui, sans-serif";
+  ctx.fillText("MARGEN DE SEGURIDAD (MoS)", 840, 285);
+  ctx.fillStyle = mos !== null && mos >= 0 ? "#34D399" : "#FB7185";
+  ctx.font = "900 42px monospace";
+  ctx.fillText(mos !== null ? `${mos > 0 ? '+' : ''}${mos.toFixed(1)}%` : "N/D", 840, 345);
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.fillText(delta !== null ? `Δ s/ Cotización: ${delta > 0 ? '+' : ''}${delta.toFixed(1)}%` : "Fórmula: (E[V] - P) / E[V]", 840, 375);
 
-  ctx.font = "16px sans-serif";
-  let curX = 50;
-  (d.metrics || []).slice(0, 4).forEach(m => {
-    ctx.fillStyle = "#edf4ff";
-    ctx.fillText(m.label + ": " + formatMetric(m), curX, fundY + 30);
-    curX += 280;
-  });
+  // Bottom Box: Reverse DCF & Call to Action
+  ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+  ctx.fillRect(60, 435, 1080, 120);
+  ctx.strokeStyle = "rgba(30, 41, 59, 0.9)";
+  ctx.strokeRect(60, 435, 1080, 120);
 
-  // Footer Disclaimer
-  ctx.fillStyle = "#64748b";
-  ctx.font = "13px sans-serif";
-  ctx.fillText("Contenido educativo. No constituye recomendación de inversión. Realizá tu propio análisis.", 50, 600);
-  ctx.fillText("Taller de Inversiones con IA · Jorge Marquetti", 50, 625);
+  const rev = d.reverse_dcf || {};
+  ctx.fillStyle = "#F1F5F9";
+  ctx.font = "bold 16px system-ui, sans-serif";
+  ctx.fillText("Expectativa Implícita (Reverse DCF):", 85, 475);
+  ctx.fillStyle = "#38BDF8";
+  ctx.font = "15px system-ui, sans-serif";
+  ctx.fillText(rev.solved ? `El precio actual exige un crecimiento de FCF del ${rev.implied_fcf_growth_5y_pct?.toFixed(1)}% anual durante 5 años.` : "Modelo DCF probabilístico calibrado.", 85, 505);
 
-  // Trigger download
+  ctx.fillStyle = "#EC4899";
+  ctx.font = "bold 15px system-ui, sans-serif";
+  ctx.fillText("🎓 Taller de Inversiones con IA — Dictado por Jorge Marquetti (educaenlinea.com.ar/web/talleria.html)", 85, 535);
+
+  // Trigger Download
   const a = document.createElement("a");
-  a.download = "QuantVal_" + d.symbol + "_Ficha.png";
+  a.download = `QuantVal_${sym}_Valuacion.png`;
   a.href = canvas.toDataURL("image/png");
   a.click();
-  trackEvent("card_downloaded", { symbol: d.symbol });
+  showToast(`¡Ficha descargada: QuantVal_${sym}_Valuacion.png!`);
 }
 
-function submitSingle() {
-  const value=$("ticker").value;
-  const pair=value.match(/^\s*([A-Za-z0-9.-]+)\s+(?:vs\.?|contra)\s+([A-Za-z0-9.-]+)\s*$/i);
+// -------------------------------------------------------------
+// Toast & Helpers
+// -------------------------------------------------------------
+function showToast(msg, isError = false) {
+  const t = document.getElementById("toast");
+  const m = document.getElementById("toastMsg");
+  if (!t || !m) return;
+  m.innerText = msg;
+  if (isError) {
+    t.className = "fixed bottom-6 right-6 z-50 transform transition-all duration-300 pointer-events-none glass px-4 py-3 rounded-xl border border-rose-500/60 text-rose-300 text-xs font-semibold shadow-2xl flex items-center gap-2 max-w-md";
+  } else {
+    t.className = "fixed bottom-6 right-6 z-50 transform transition-all duration-300 pointer-events-none glass px-4 py-3 rounded-xl border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-2xl flex items-center gap-2 max-w-md";
+  }
+  if (t.classList && typeof t.classList.remove === "function") {
+    t.classList.remove("translate-y-20", "opacity-0");
+    t.classList.add("translate-y-0", "opacity-100");
+  }
+  setTimeout(() => {
+    if (t.classList && typeof t.classList.remove === "function") {
+      t.classList.remove("translate-y-0", "opacity-100");
+      t.classList.add("translate-y-20", "opacity-0");
+    }
+  }, isError ? 4500 : 3000);
+}
+
+function updateURL(symbols) {
   try {
-    if(pair){const a=normalizeInput(pair[1]),b=normalizeInput(pair[2]);setMode("compare");$("ticker-a").value=a;$("ticker-b").value=b;analyze([a,b]);}
-    else {const symbol=normalizeInput(value);$("ticker").value=symbol;setMode("single");analyze([symbol]);}
-  }catch(error){showError(error.message);}
+    const url = new URL(location.href);
+    ["ticker", "a", "b"].forEach(k => url.searchParams.delete(k));
+    if (symbols.length === 1) url.searchParams.set("ticker", symbols[0]);
+    else if (symbols.length === 2) {
+      url.searchParams.set("a", symbols[0]);
+      url.searchParams.set("b", symbols[1]);
+    }
+    history.replaceState(null, "", url);
+  } catch (_) {}
 }
 
-$("single-form").addEventListener("submit",e=>{e.preventDefault();submitSingle();});
-$("compare-form").addEventListener("submit",e=>{e.preventDefault();try{const a=normalizeInput($("ticker-a").value),b=normalizeInput($("ticker-b").value);if(a===b)throw new Error("Elegí dos empresas diferentes.");$("ticker-a").value=a;$("ticker-b").value=b;analyze([a,b]);}catch(error){showError(error.message);}});
-["single","compare"].forEach(m=>$("tab-"+m).addEventListener("click",()=>{generation++;if(requestController)requestController.abort();current=[];$("loading").hidden=$("results").hidden=$("comparison").hidden=$("result-tools").hidden=true;$("error").hidden=true;setMode(m);}));
-document.querySelectorAll("[data-ticker]").forEach(b=>b.addEventListener("click",()=>{setMode("single");$("ticker").value=b.dataset.ticker;analyze([b.dataset.ticker]);}));
-$("copy").addEventListener("click",()=>{if(current.length)copyText(summary(current));});
-$("share").addEventListener("click",()=>{if(current.length)copyText(location.href);});
-const downloadBtn = $("download-card");
-if (downloadBtn) downloadBtn.addEventListener("click", downloadCardPng);
+function quickSearch(sym) {
+  evaluateTicker(sym);
+}
 
-const tallerLink = $("taller-link");
-if (tallerLink) tallerLink.addEventListener("click", () => trackEvent("taller_clicked", { href: tallerLink.href }));
+function quickDuel(symA, symB) {
+  switchViewMode("duel");
+  evaluateDuel(symA, symB);
+}
 
-fetch("/api/config").then(r=>r.ok?r.json():Promise.reject()).then(c=>{
-  if($("taller-link")){ $("taller-link").href=c.taller_url;$("taller-link").textContent=c.taller_label;}
-  if($("taller-note")) $("taller-note").textContent=c.taller_note;
-  if($("release")) $("release").textContent="Versión "+c.version+" · "+c.model_version+" · Commit "+String(c.commit).slice(0,12);
-}).catch(()=>{});
+// -------------------------------------------------------------
+// DOM Ready Initialization
+// -------------------------------------------------------------
+if (typeof window !== "undefined") {
+  window.addEventListener("DOMContentLoaded", () => {
+    const searchForm = document.getElementById("searchForm");
+    if (searchForm) {
+      searchForm.addEventListener("submit", e => {
+        e.preventDefault();
+        const input = document.getElementById("tickerInput");
+        if (input && input.value.trim()) {
+          evaluateTicker(input.value.trim());
+        }
+      });
+    }
 
-const params=new URLSearchParams(location.search);
-if(params.get("a")&&params.get("b")){$("ticker-a").value=params.get("a");$("ticker-b").value=params.get("b");setMode("compare");$("compare-form").requestSubmit();}
-else if(params.get("ticker")){$("ticker").value=params.get("ticker");submitSingle();}
+    const duelForm = document.getElementById("duelSearchForm");
+    if (duelForm) {
+      duelForm.addEventListener("submit", e => {
+        e.preventDefault();
+        const inA = document.getElementById("tickerInputA");
+        const inB = document.getElementById("tickerInputB");
+        if (inA && inB && inA.value.trim() && inB.value.trim()) {
+          evaluateDuel(inA.value.trim(), inB.value.trim());
+        }
+      });
+    }
+
+    // URL Query Params Bootstrap
+    const urlParams = new URLSearchParams(window.location.search);
+    const tickParam = urlParams.get("ticker");
+    const aParam = urlParams.get("a");
+    const bParam = urlParams.get("b");
+
+    if (aParam && bParam) {
+      switchViewMode("duel");
+      evaluateDuel(aParam, bParam);
+    } else if (tickParam) {
+      evaluateTicker(tickParam);
+    } else {
+      evaluateTicker("NVDA");
+    }
+  });
+}

@@ -1,29 +1,862 @@
 <!doctype html>
 <html lang="es-AR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Laboratorio de Inversiones: Analizá balances de la SEC, descubrí qué crecimiento descuenta el precio y simulá escenarios personalizados. Gratis, sin registro.">
-<title>QuantVal Pro | Laboratorio de Inversiones y Valuación — Acciones Argentinas</title>
-<link rel="stylesheet" href="/static/app.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Laboratorio de Inversiones: Analizá balances de la SEC, descubrí qué crecimiento descuenta el precio y simulá escenarios personalizados. Gratis, sin registro.">
+  <title>QuantVal Pro | Laboratorio de Inversiones y Valuación Fundamental — @accionesargentinas</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#F0FDFA', 100: '#CCFBF1', 500: '#14B8A6', 600: '#0D9488', 700: '#0F766E' },
+            dark: { 950: '#070A11', 900: '#0B0F19', 800: '#111827', 700: '#1F2937', 600: '#374151' }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .glass { background: rgba(17, 24, 39, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(31, 41, 55, 0.85); }
+    .gradient-text { background: linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: #06B6D4;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+      border: 2px solid #FFFFFF;
+    }
+    details summary::-webkit-details-marker { display: none; }
+  </style>
 </head>
-<body>
-<header class="top"><a class="brand" href="/" aria-label="QuantVal inicio"><span class="logo">↗</span>Quant<span>Val</span> <small>PRO</small></a><a href="https://www.instagram.com/accionesargentinas/" target="_blank" rel="noopener noreferrer" class="social">@accionesargentinas</a></header>
-<main>
-<section class="hero"><div class="eyebrow">LABORATORIO DE INVERSIONES · GRATIS · SIN REGISTRO</div><h1>Entendé los números<br>y qué descuenta el <span>precio.</span></h1><p>Revisá ingresos, márgenes y flujos con balances oficiales de la SEC.<br>Descubrí qué crecimiento exige la cotización actual y simulá escenarios interactivos.</p><p class="coverage">Balances anuales auditados de SEC EDGAR. Valuación DCF 10 años, expectativas implícitas y modelos bancarios adaptados.</p></section>
-<nav class="tabs" aria-label="Modo de análisis"><button id="tab-single" type="button" class="selected" aria-pressed="true">Analizar empresa</button><button id="tab-compare" type="button" aria-pressed="false">Comparar dos empresas</button></nav>
-<section class="search-panel" aria-label="Buscar empresa">
-<form id="single-form" novalidate><label for="ticker">Ticker de la empresa</label><div class="search-row"><input id="ticker" name="ticker" placeholder="Ej. NVDA, AAPL o MSFT" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="search-help error"><button class="primary" type="submit">Analizar</button></div></form>
-<form id="compare-form" hidden novalidate><div class="pair"><div><label for="ticker-a">Primera empresa</label><input id="ticker-a" placeholder="Ej. AAPL" maxlength="24" autocomplete="off" autocapitalize="characters" aria-describedby="error"></div><div><label for="ticker-b">Segunda empresa</label><input id="ticker-b" placeholder="Ej. MSFT" maxlength="24" autocomplete="off" autocapitalize="characters" aria-describedby="error"></div></div><button class="primary compare-submit" type="submit">Comparar</button></form>
-<p id="search-help" class="help">Usá el símbolo de Wall Street. También podés escribir AAPL vs MSFT.</p>
-<div class="examples" aria-label="Ejemplos"><span>Probá con:</span><button type="button" data-ticker="NVDA">NVIDIA</button><button type="button" data-ticker="AAPL">Apple</button><button type="button" data-ticker="MSFT">Microsoft</button><button type="button" data-ticker="NFLX">Netflix</button><button type="button" data-ticker="JPM">JPMorgan</button></div>
-<div id="error" class="message error" role="alert" hidden></div><div id="loading" class="message loading" role="status" hidden>Consultando balances públicos… Puede tardar unos segundos.</div>
-</section>
-<section id="results" aria-label="Resultado del análisis" hidden></section>
-<section id="comparison" aria-label="Comparación de empresas" hidden></section>
-<div id="result-tools" class="tools" hidden><button type="button" id="copy">Copiar resumen</button><button type="button" id="download-card" class="btn-card">Descargar Ficha (PNG)</button><button type="button" id="share">Copiar enlace</button><span id="copy-status" role="status"></span></div>
-<section class="cta"><div class="eyebrow">TALLER DE INVERSIONES CON IA</div><h2>Convertí estos datos en una investigación útil.</h2><p>Aprendé a investigar empresas, contrastar escenarios y usar la IA como asistente de inversión en mi Taller de Inversiones con IA, con Jorge Marquetti.</p><a id="taller-link" class="primary" href="https://www.educaenlinea.com.ar/web/talleria.html" target="_blank" rel="noopener noreferrer">Ver Taller de Inversiones con IA</a><small id="taller-note">Abrís la información del Taller.</small></section>
-<section class="method"><details><summary>Cómo se calculan los modelos, supuestos y fuentes</summary><p><strong>Balances oficiales:</strong> Los datos provienen de conceptos estándar US-GAAP/IFRS reportados en SEC EDGAR (10-K, 20-F) con períodos anuales auditados y enlaces al documento original.</p><p><strong>Valoración DCF 10 años:</strong> Modela flujos libres de caja (CFO − Capex) con tasa de crecimiento explícita durante 5 años, convergencia macroeconómica en años 6 a 10 y valor residual por perpetuidad de Gordon-Shapiro. El valor patrimonial suma caja y deduce deuda total.</p><p><strong>DCF Inverso (Reverse DCF):</strong> Resuelve por bisección numérica qué tasa de crecimiento compuesto exige el precio actual de mercado manteniendo los demás supuestos del modelo. Refleja expectativas implícitas, no pronósticos de analistas.</p><p><strong>Entidades bancarias:</strong> Dado que el flujo operativo de los bancos depende de intermediación de depósitos y requerimientos de capital (Basilea III), se emplea el modelo de P/B Justificado por Gordon-Shapiro según su rentabilidad sobre patrimonio (ROE).</p></details></section>
-</main>
-<footer><strong>Contenido educativo.</strong><p>No constituye asesoramiento financiero, recomendación de inversión ni solicitud de compra o venta. Los modelos parten de supuestos que pueden no cumplirse. Realizá tu propio análisis. El rendimiento pasado no garantiza resultados futuros.</p><p>La cotización corresponde a la acción subyacente en Wall Street en USD; no al precio en pesos de un CEDEAR.</p><div class="release">QuantVal Pro · @accionesargentinas · <span id="release">Versión 3.0.0</span></div></footer>
-<script src="/static/app.js" defer></script>
-</body></html>
+<body class="bg-dark-950 text-gray-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-dark-700/80 bg-dark-900/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+        </div>
+        <div>
+          <span class="font-extrabold text-lg tracking-tight">Quant<span class="text-cyan-400">Val</span></span>
+          <span class="ml-2 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60">Lead Magnet Edition</span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3 text-xs">
+        <a href="https://instagram.com/accionesargentinas" target="_blank" rel="noopener" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 hover:border-pink-500/50 text-xs text-gray-300 font-semibold transition-all group">
+          <span class="w-2 h-2 rounded-full bg-pink-500 animate-pulse"></span>
+          <span class="text-pink-400 group-hover:text-pink-300">@accionesargentinas</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero & Search Section -->
+  <section class="max-w-7xl mx-auto px-4 pt-8 pb-5 w-full">
+    <div class="text-center max-w-2xl mx-auto mb-6">
+      <div class="inline-block text-[11px] font-extrabold tracking-wider uppercase text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-3 py-1 rounded-full mb-3">
+        Laboratorio de Inversiones • Balances Oficiales SEC EDGAR • 100% Gratuito
+      </div>
+      <h1 class="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mb-2.5">
+        Valuación Fundamental y Análisis de Acciones con <span class="gradient-text">Inteligencia Artificial</span>
+      </h1>
+      <p class="text-xs sm:text-sm text-gray-400 leading-relaxed">
+        Revisá balances auditados, descubrí qué crecimiento exige el precio actual (Reverse DCF) y simulá escenarios interactivos.
+      </p>
+    </div>
+
+    <!-- Mode Switcher Tabs -->
+    <div class="flex items-center justify-center gap-2 mb-5">
+      <button id="tabSingle" type="button" onclick="switchViewMode('single')" class="px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span>Valuación Individual</span>
+      </button>
+      <button id="tabDuel" type="button" onclick="switchViewMode('duel')" class="px-5 py-2.5 rounded-xl font-bold text-xs transition-all bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-amber-500/50 flex items-center gap-2">
+        <span>⚔️ Cara a Cara (Head-to-Head)</span>
+        <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">Duelo</span>
+      </button>
+    </div>
+
+    <!-- Single Search Form -->
+    <div id="singleSearchWrapper" class="max-w-xl mx-auto mb-4">
+      <form id="searchForm" class="flex gap-2">
+        <div class="relative flex-1">
+          <input type="text" id="tickerInput" placeholder="Ingresá un ticker (ej. NVDA, AAPL, MSFT, NFLX, JPM)..." 
+                 class="w-full bg-dark-800 border border-dark-700 rounded-xl px-4 py-3.5 pl-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-semibold text-sm shadow-xl uppercase"
+                 value="NVDA" required autocomplete="off">
+          <svg class="w-5 h-5 text-gray-500 absolute left-3.5 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <button type="submit" id="btnSubmit" class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-lg shadow-cyan-500/20 text-sm flex items-center gap-2 whitespace-nowrap">
+          <span>Valuar</span>
+        </button>
+      </form>
+
+      <!-- Quick Ticker Chips -->
+      <div class="quick-chips flex items-center justify-center gap-1.5 mt-3 flex-wrap">
+        <span class="text-xs text-gray-500 font-medium">Ejemplos:</span>
+        <button type="button" onclick="quickSearch('NVDA')" class="text-xs bg-dark-800 hover:bg-dark-700 text-cyan-400 border border-dark-700 hover:border-cyan-500/40 px-2.5 py-1 rounded-lg transition-colors font-semibold">NVDA (Semis)</button>
+        <button type="button" onclick="quickSearch('AAPL')" class="text-xs bg-dark-800 hover:bg-dark-700 text-gray-300 border border-dark-700 hover:border-gray-500/40 px-2.5 py-1 rounded-lg transition-colors">AAPL (Tech)</button>
+        <button type="button" onclick="quickSearch('MSFT')" class="text-xs bg-dark-800 hover:bg-dark-700 text-blue-400 border border-dark-700 hover:border-blue-500/40 px-2.5 py-1 rounded-lg transition-colors font-semibold">MSFT (Cloud)</button>
+        <button type="button" onclick="quickSearch('NFLX')" class="text-xs bg-dark-800 hover:bg-dark-700 text-rose-400 border border-dark-700 hover:border-rose-500/40 px-2.5 py-1 rounded-lg transition-colors font-semibold">NFLX (Media)</button>
+        <button type="button" onclick="quickSearch('JPM')" class="text-xs bg-dark-800 hover:bg-dark-700 text-emerald-400 border border-dark-700 hover:border-emerald-500/40 px-2.5 py-1 rounded-lg transition-colors font-semibold">JPM (Banca Tier-1)</button>
+        <button type="button" onclick="quickSearch('MELI')" class="text-xs bg-dark-800 hover:bg-dark-700 text-yellow-400 border border-dark-700 hover:border-yellow-500/40 px-2.5 py-1 rounded-lg transition-colors font-semibold">MELI (E-Commerce)</button>
+      </div>
+    </div>
+
+    <!-- Duel Search Form (Cara a Cara) -->
+    <div id="duelSearchWrapper" class="hidden max-w-2xl mx-auto mb-4">
+      <form id="duelSearchForm" class="flex flex-col sm:flex-row items-center gap-2">
+        <div class="relative flex-1 w-full">
+          <input type="text" id="tickerInputA" placeholder="Ticker A (ej. NVDA)..." 
+                 class="w-full bg-dark-800 border border-dark-700 rounded-xl px-4 py-3.5 pl-10 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 font-semibold text-sm shadow-xl uppercase"
+                 value="NVDA" required autocomplete="off">
+          <span class="absolute left-3.5 top-3.5 text-cyan-400 font-bold text-xs">A:</span>
+        </div>
+        <div class="flex items-center justify-center font-black text-amber-400 text-sm px-2">VS</div>
+        <div class="relative flex-1 w-full">
+          <input type="text" id="tickerInputB" placeholder="Ticker B (ej. MSFT)..." 
+                 class="w-full bg-dark-800 border border-dark-700 rounded-xl px-4 py-3.5 pl-10 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 font-semibold text-sm shadow-xl uppercase"
+                 value="MSFT" required autocomplete="off">
+          <span class="absolute left-3.5 top-3.5 text-purple-400 font-bold text-xs">B:</span>
+        </div>
+        <button type="submit" id="btnSubmitDuel" class="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-lg text-sm whitespace-nowrap">
+          <span>Enfrentar</span>
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Loading State -->
+  <div id="loadingState" class="hidden max-w-7xl mx-auto px-4 py-16 text-center">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500 mb-4"></div>
+    <h3 class="text-lg font-bold text-gray-200" id="loadingTitle">Consultando estados contables...</h3>
+    <p class="text-xs text-gray-500 mt-1">Descargando balances oficiales SEC y calibrando escenarios de valuación...</p>
+  </div>
+
+  <!-- Single Stock Dashboard -->
+  <main id="dashboard" class="max-w-7xl mx-auto px-4 pb-16 w-full flex-1">
+    
+    <!-- Top Summary Card -->
+    <div class="glass rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-dark-700/60 pb-5">
+        <div>
+          <div class="flex items-center gap-3 mb-1">
+            <h2 id="compName" class="text-2xl font-extrabold tracking-tight text-white">-</h2>
+            <span id="tickerBadge" class="bg-cyan-950 text-cyan-400 border border-cyan-800/60 text-xs font-bold px-2.5 py-0.5 rounded-md">-</span>
+            <span id="archetypeBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-dark-700 text-gray-300 border border-dark-600">-</span>
+          </div>
+          <p id="compSector" class="text-xs text-gray-400">-</p>
+          <div class="mt-1 text-[11px] text-cyan-400/90 font-medium">
+            📌 Cotización en dólares (USD) de la acción subyacente en Wall Street • No precio en ARS de CEDEARs locales.
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- Verdict Pill -->
+          <div id="verdictBox" class="p-3.5 px-5 rounded-xl flex items-center gap-4 bg-emerald-950/40 border border-emerald-800/40">
+            <div>
+              <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Veredicto Cuantitativo</div>
+              <div id="verdictText" class="text-sm sm:text-base font-extrabold text-emerald-400">-</div>
+            </div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <button onclick="copyExecutiveSummary()" id="btnCopyReport" title="Copiar Resumen Ejecutivo" class="h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-cyan-300">Copiar</span>
+          </button>
+          
+          <button onclick="downloadCardPng()" id="btnDownloadCard" title="Descargar Ficha Gráfica PNG" class="h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-emerald-300">Ficha PNG</span>
+          </button>
+
+          <button onclick="copyShareLink()" id="btnShareLink" title="Copiar Enlace Directo" class="h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-blue-300">Enlace</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Key Metrics Row (5 Cards) -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3.5 pt-5">
+        
+        <!-- Card 1: Market Price with Resilience Controls -->
+        <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs text-gray-400 font-semibold">Precio de Mercado</span>
+              <span id="quoteBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">🟢 Mercado</span>
+            </div>
+            <div id="currPrice" class="text-2xl font-black text-white">-</div>
+            <div id="quoteAsOf" class="text-[10px] text-gray-400 mt-0.5">En tiempo real</div>
+          </div>
+          <div class="pt-2 border-t border-dark-700/50 mt-2 flex items-center gap-1.5 flex-wrap">
+            <button onclick="refreshQuote()" title="Actualizar cotización" class="text-[10px] bg-dark-700 hover:bg-dark-600 px-2 py-0.5 rounded text-gray-300 font-semibold transition-colors">🔄 Actualizar</button>
+            <button onclick="toggleManualPriceBox()" title="Fijar precio de referencia manual" class="text-[10px] bg-dark-700 hover:bg-dark-600 px-2 py-0.5 rounded text-cyan-300 font-semibold transition-colors">✏️ Modificar</button>
+          </div>
+        </div>
+
+        <!-- Card 2: Weighted Fair Value -->
+        <div class="bg-dark-800/70 rounded-xl p-3.5 border border-cyan-500/40 flex flex-col justify-between">
+          <div>
+            <div class="text-xs text-cyan-400 font-bold mb-0.5">Fair Value Ponderado E[V]</div>
+            <div id="fairValue" class="text-2xl font-black text-cyan-400">-</div>
+            <div class="text-[10px] text-gray-400 mt-0.5">25% Bear + 50% Base + 25% Bull</div>
+          </div>
+          <div class="text-[10px] text-cyan-300/80 font-mono pt-2 border-t border-dark-700/50">Valor intrínseco esperado</div>
+        </div>
+
+        <!-- Card 3: Margin of Safety (MoS) -->
+        <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
+          <div>
+            <div class="text-xs text-gray-300 font-bold mb-0.5">Margen de Seguridad (MoS)</div>
+            <div id="mosValue" class="text-2xl font-black text-white">-</div>
+            <div class="text-[10px] text-gray-400 mt-0.5">Fórmula: (E[V] - Precio) / E[V]</div>
+          </div>
+          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">Descuento respecto a Fair Value</div>
+        </div>
+
+        <!-- Card 4: Delta vs Current Price -->
+        <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
+          <div>
+            <div class="text-xs text-gray-300 font-bold mb-0.5">Diferencia s/ Cotización (Δ)</div>
+            <div id="deltaValue" class="text-2xl font-black text-white">-</div>
+            <div class="text-[10px] text-gray-400 mt-0.5">Fórmula: (E[V] - Precio) / Precio</div>
+          </div>
+          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">Potencial de apreciación sobre precio</div>
+        </div>
+
+        <!-- Card 5: Base del modelo -->
+        <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
+          <div>
+            <div class="text-xs text-gray-400 mb-0.5">Escenario Base del modelo</div>
+            <div id="scenBaseValTop" class="text-2xl font-bold text-gray-200">-</div>
+            <div class="text-[10px] text-gray-400 mt-0.5">Hipótesis central del modelo</div>
+          </div>
+          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">50% ponderación inicial</div>
+        </div>
+
+      </div>
+
+      <!-- Inline Manual Price Form (collapsible) -->
+      <div id="manualPriceBox" class="hidden mt-3 p-3 bg-dark-900/90 rounded-xl border border-cyan-500/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="text-xs text-gray-300">
+          <strong>Ingresar precio de referencia manual:</strong> Si el mercado está cerrado o deseás simular otro nivel de precio.
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <input id="inputManualPrice" type="number" step="0.01" min="0.1" placeholder="Ej. 130.50" 
+                 class="bg-dark-800 border border-dark-700 rounded-lg px-3 py-1.5 text-white font-mono text-xs w-32 focus:outline-none focus:border-cyan-500">
+          <button onclick="applyManualPrice()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">Aplicar</button>
+          <button onclick="resetManualPrice()" class="bg-dark-700 hover:bg-dark-600 text-gray-300 text-xs px-3 py-1.5 rounded-lg transition-colors">Restablecer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reverse DCF Card: "¿Qué está descontando el precio?" -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-cyan-500/40 bg-gradient-to-br from-dark-900/90 via-dark-800/80 to-cyan-950/20">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 border-b border-dark-700/60 pb-3">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-cyan-400 block mb-1">REVERSE DCF • EXPECTATIVA IMPLÍCITA</span>
+          <h3 class="text-base sm:text-lg font-black text-white">¿Qué Crecimiento Descuenta la Cotización Actual?</h3>
+        </div>
+        <span class="text-[10px] px-2.5 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-semibold self-start sm:self-auto">Modelo Inverso Transparente</span>
+      </div>
+
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pt-2">
+        <div class="flex-1">
+          <div id="reverseDcfGrowth" class="text-3xl sm:text-4xl font-black text-cyan-400 mb-2">-</div>
+          <p id="reverseDcfText" class="text-xs sm:text-sm text-gray-300 leading-relaxed mb-2">
+            Calculando la tasa compuesta exigida por la cotización de mercado...
+          </p>
+          <p id="reverseDcfParams" class="text-[11px] text-gray-400 font-mono">-</p>
+        </div>
+        <div class="bg-dark-900/80 p-3.5 rounded-xl border border-dark-700/60 text-[11px] text-gray-400 max-w-sm">
+          💡 <strong>Expectativa implícita del modelo:</strong> Resuelve numéricamente qué crecimiento anual de FCF necesita el negocio para justificar el precio actual. No constituye consenso ni pronóstico de analistas.
+        </div>
+      </div>
+    </div>
+
+    <!-- 6 Indicadores Fundamentales Auditados (Core Lead Magnet Section) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Radiografía Fundamental: 6 Indicadores Clave</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Balances Oficiales SEC EDGAR</span>
+          </h3>
+          <p class="text-xs text-gray-400">Métricas esenciales de ventas, márgenes, generación de caja, solvencia y retorno sobre capital.</p>
+        </div>
+        <span class="text-[10px] text-gray-400 self-start sm:self-auto font-mono">Período: Balances Anuales Auditados</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="coreIndicatorsGrid">
+        <!-- Injected dynamically from d.core_indicators -->
+      </div>
+    </div>
+
+    <!-- Matriz de Escenarios Probabilísticos (3 Scenarios) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Matriz de Escenarios de Valuación (3 Probabilidades)</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Modelo DCF Probabilístico</span>
+          </h3>
+          <p class="text-xs text-gray-400">Ponderación matemática de tres estados macroeconómicos y operativos del negocio.</p>
+        </div>
+        <div class="text-left md:text-right">
+          <span class="text-[10px] text-gray-400 block uppercase font-semibold">Valor Intrínseco Esperado E[V]</span>
+          <span id="scenarioEV" class="text-2xl font-black text-cyan-400">-</span>
+        </div>
+      </div>
+
+      <!-- Editable Weights Toolbar -->
+      <div class="bg-dark-800/80 p-3 rounded-xl border border-dark-700/60 mb-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <span class="text-gray-300 font-semibold">Ponderaciones de Escenarios (Suma requerida: 100%):</span>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-1 text-rose-300">
+            <span>Bear:</span>
+            <input id="weightBear" type="number" min="0" max="100" value="25" oninput="onScenarioWeightChange()" 
+                   class="w-14 bg-dark-900 border border-dark-700 rounded px-1.5 py-0.5 text-center text-white font-mono text-xs focus:border-cyan-500">%
+          </label>
+          <label class="flex items-center gap-1 text-gray-300">
+            <span>Base:</span>
+            <input id="weightBase" type="number" min="0" max="100" value="50" oninput="onScenarioWeightChange()" 
+                   class="w-14 bg-dark-900 border border-dark-700 rounded px-1.5 py-0.5 text-center text-white font-mono text-xs focus:border-cyan-500">%
+          </label>
+          <label class="flex items-center gap-1 text-emerald-300">
+            <span>Bull:</span>
+            <input id="weightBull" type="number" min="0" max="100" value="25" oninput="onScenarioWeightChange()" 
+                   class="w-14 bg-dark-900 border border-dark-700 rounded px-1.5 py-0.5 text-center text-white font-mono text-xs focus:border-cyan-500">%
+          </label>
+          <span id="weightsSumStatus" class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">Suma: 100% ✓</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <!-- Bear -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-rose-500/30 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-rose-400">Escenario Pesimista (Bear)</span>
+              <span class="text-[10px] bg-rose-950 text-rose-300 border border-rose-800/50 px-2 py-0.5 rounded font-semibold">25% Prob</span>
+            </div>
+            <div id="scenBearVal" class="text-2xl font-black text-white mb-1">-</div>
+            <div class="text-[11px] text-gray-300 space-y-0.5 mb-3">
+              <div>Crecimiento proyectado: <strong id="scenBearGrowth" class="text-rose-300">-</strong></div>
+              <div>Tasa de descuento: <strong id="scenBearWacc" class="text-gray-300">-</strong></div>
+            </div>
+          </div>
+          <p id="scenBearHypo" class="text-[10px] text-gray-400 italic border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Base del modelo -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-cyan-500/50 flex flex-col justify-between relative overflow-hidden">
+          <div class="absolute -right-8 -top-8 w-20 h-20 bg-cyan-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-cyan-400">Base del modelo (Central)</span>
+              <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800/50 px-2 py-0.5 rounded font-semibold">50% Prob</span>
+            </div>
+            <div id="scenBaseVal" class="text-2xl font-black text-white mb-1">-</div>
+            <div class="text-[11px] text-gray-300 space-y-0.5 mb-3">
+              <div>Crecimiento proyectado: <strong id="scenBaseGrowth" class="text-cyan-300">-</strong></div>
+              <div>Tasa de descuento: <strong id="scenBaseWacc" class="text-gray-300">-</strong></div>
+            </div>
+          </div>
+          <p id="scenBaseHypo" class="text-[10px] text-gray-400 italic border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+
+        <!-- Bull -->
+        <div class="bg-dark-800/70 p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-emerald-400">Escenario Optimista (Bull)</span>
+              <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/50 px-2 py-0.5 rounded font-semibold">25% Prob</span>
+            </div>
+            <div id="scenBullVal" class="text-2xl font-black text-white mb-1">-</div>
+            <div class="text-[11px] text-gray-300 space-y-0.5 mb-3">
+              <div>Crecimiento proyectado: <strong id="scenBullGrowth" class="text-emerald-300">-</strong></div>
+              <div>Tasa de descuento: <strong id="scenBullWacc" class="text-gray-300">-</strong></div>
+            </div>
+          </div>
+          <p id="scenBullHypo" class="text-[10px] text-gray-400 italic border-t border-dark-700/50 pt-2 leading-relaxed">-</p>
+        </div>
+      </div>
+
+      <!-- Math Transparency Box -->
+      <div class="bg-dark-900/80 p-3 rounded-xl border border-dark-700/60 text-[11px] text-gray-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-gray-300">Fórmula de Valuación Esperada:</span>
+          <code class="text-cyan-300 font-mono">E[V] = (w_bear × Bear) + (w_base × Base) + (w_bull × Bull)</code>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-gray-300">Margen de Seguridad (MoS):</span>
+          <code class="text-emerald-300 font-mono">(E[V] - Precio) / E[V]</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Laboratorio Interactivo de Sensibilidad (What-If Simulator) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-cyan-500/30">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Simulador Interactivo de Sensibilidad (What-If)</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Recálculo Dinámico</span>
+          </h3>
+          <p class="text-xs text-gray-400">Modificá la tasa de crecimiento y el costo de capital para recalcular el valor intrínseco al instante.</p>
+        </div>
+        <button onclick="resetSensitivitySliders()" id="calcSensitivityReset" class="text-xs text-cyan-400 hover:text-cyan-300 bg-dark-800 hover:bg-dark-700 border border-dark-700 px-3 py-1.5 rounded-lg transition-colors font-semibold flex items-center gap-1.5 self-start md:self-auto">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span>Restablecer Parámetros Base</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+        <!-- Sliders (8 cols) -->
+        <div class="lg:col-span-8 space-y-4">
+          <!-- Slider 1: Growth -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-gray-300 font-medium">Tasa de Crecimiento Anual a 5 Años (g):</span>
+              <span id="sliderGrowthVal" class="font-extrabold text-cyan-400 text-sm">15.0%</span>
+            </div>
+            <input type="range" id="sliderGrowth" min="-10" max="45" step="0.5" value="15" 
+                   class="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                   oninput="onSensitivitySliderChange()">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>-10% (Desaceleración)</span>
+              <span>+15% (Crecimiento Sano)</span>
+              <span>+45% (Aceleración)</span>
+            </div>
+          </div>
+
+          <!-- Slider 2: WACC / Discount -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-gray-300 font-medium">Tasa de Descuento / Costo de Capital (WACC):</span>
+              <span id="sliderWaccVal" class="font-extrabold text-cyan-400 text-sm">10.0%</span>
+            </div>
+            <input type="range" id="sliderWacc" min="6" max="16" step="0.25" value="10" 
+                   class="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                   oninput="onSensitivitySliderChange()">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>6% (Tasas Bajas)</span>
+              <span>10% (Benchmark)</span>
+              <span>16% (Estrés / Alto Riesgo)</span>
+            </div>
+          </div>
+
+          <!-- Slider 3: Exit Multiple -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-gray-300 font-medium">Múltiplo Terminal Estimado (Exit P/E o P/TBV):</span>
+              <span id="sliderMultipleVal" class="font-extrabold text-cyan-400 text-sm">20.0x</span>
+            </div>
+            <input type="range" id="sliderMultiple" min="6" max="40" step="0.5" value="20" 
+                   class="w-full h-2 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                   oninput="onSensitivitySliderChange()">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>6x (Piso Defensivo)</span>
+              <span>20x (Promedio Mercado)</span>
+              <span>40x (Expansión)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Output Card (4 cols) -->
+        <div class="lg:col-span-4 bg-dark-800/90 rounded-xl p-5 border border-cyan-500/40 text-center flex flex-col justify-between h-full">
+          <div>
+            <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Fair Value Dinámico Simulado</span>
+            <div id="simFairValue" class="text-3xl font-black text-cyan-400 mb-1">$0.00</div>
+            <div id="simMosBadge" class="inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-emerald-950 text-emerald-300 border border-emerald-800/60">-</div>
+          </div>
+          <div class="border-t border-dark-700/70 pt-3 text-[11px] text-gray-400 text-left space-y-1">
+            <div class="flex justify-between">
+              <span>Precio Actual:</span>
+              <strong id="simCurrentPrice" class="text-white">-</strong>
+            </div>
+            <div class="flex justify-between">
+              <span>Variación vs Modelo Base:</span>
+              <strong id="simDeltaBase" class="text-gray-300">-</strong>
+            </div>
+            <p id="simBreakevenNote" class="text-[10px] text-cyan-400/90 pt-1 border-t border-dark-700/40 leading-tight">-</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Retorno Proyectado a 5 Años: Variación Anualizada Esperada (CAGR 5 Años) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Variación Anualizada Esperada (CAGR 5 Años)</span>
+            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Convergencia a Fair Value</span>
+          </h3>
+          <p class="text-xs text-gray-400">Proyección geométrica anual del precio al converger al valor de salida en 5 años. No incorpora dividendos.</p>
+        </div>
+        <div id="cagrVerdictBadge" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-dark-800 text-gray-300 border border-dark-700 self-start md:self-auto">-</div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-cyan-500/50 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-semibold text-gray-400 block mb-1">E[CAGR] Ponderado</span>
+            <div id="tirExpected" class="text-2xl font-black text-cyan-300 mb-1">-</div>
+            <p class="text-[11px] text-gray-400">Retorno ponderado bajo los 3 escenarios.</p>
+          </div>
+          <div class="pt-2 border-t border-dark-700/50 text-[11px] space-y-0.5 text-gray-400 mt-2">
+            <div>vs S&P 500 (10%): <strong id="tirSpSpread" class="text-emerald-400">-</strong></div>
+            <div>vs Bono 10Y (4.3%): <strong id="tirTreasurySpread" class="text-emerald-400">-</strong></div>
+          </div>
+        </div>
+
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-dark-700/60 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-semibold text-gray-400 block mb-1">Escenario Base del modelo</span>
+            <div id="tirBase" class="text-2xl font-black text-white mb-1">-</div>
+            <p class="text-[11px] text-gray-400">Convergencia bajo hipótesis central.</p>
+          </div>
+          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50 mt-2">50% ponderación</div>
+        </div>
+
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-semibold text-emerald-400 block mb-1">Escenario Optimista (Bull)</span>
+            <div id="tirBull" class="text-2xl font-black text-emerald-400 mb-1">-</div>
+            <p class="text-[11px] text-gray-400">Aceleración y expansión de múltiplo.</p>
+          </div>
+          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50 mt-2">25% ponderación</div>
+        </div>
+
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-rose-500/30 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-semibold text-rose-400 block mb-1">Escenario Pesimista (Bear)</span>
+            <div id="tirBear" class="text-2xl font-black text-rose-400 mb-1">-</div>
+            <p class="text-[11px] text-gray-400">Compresión de márgenes y múltiplos.</p>
+          </div>
+          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50 mt-2">25% ponderación</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quality Scorecard & Due Diligence (Piotroski, Mayer, Altman) -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <!-- Piotroski -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-emerald-500 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400">Piotroski F-Score</span>
+            <span id="piotScore" class="text-lg font-black text-emerald-400">-</span>
+          </div>
+          <div class="w-full bg-dark-700 h-1.5 rounded-full overflow-hidden mb-2">
+            <div id="piotBar" class="bg-emerald-500 h-full rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+        <p id="piotNote" class="text-[11px] text-gray-400 leading-tight">Criterios contables auditados en balances oficiales de la SEC.</p>
+      </div>
+
+      <!-- Mayer 100-Baggers -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-cyan-500 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400" id="mayerTitle">ROIC (Christopher Mayer)</span>
+            <span id="mayerRoic" class="text-lg font-black text-cyan-400">-</span>
+          </div>
+          <div class="text-[11px] text-gray-400 mb-1" id="mayerBenchmark">Umbral Mayer: &gt; 15%</div>
+        </div>
+        <div id="roicSpread" class="text-xs font-bold text-emerald-400">-</div>
+      </div>
+
+      <!-- Altman Solvency -->
+      <div class="glass rounded-xl p-5 shadow-lg border-l-4 border-blue-500 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-400" id="altmanTitle">Solvencia Patrimonial</span>
+            <span id="altmanScore" class="text-lg font-black text-blue-400">-</span>
+          </div>
+          <div id="altmanZone" class="text-xs font-bold text-emerald-400 mb-1">-</div>
+        </div>
+        <p class="text-[11px] text-gray-400">Evaluación de solvencia y respaldo de balance.</p>
+      </div>
+    </div>
+
+    <!-- Checklist de Due Diligence (8 Criterios) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6 border border-dark-700/80">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Checklist Fundamental de Calidad (8 Criterios de Due Diligence)</span>
+            <span id="checklistScoreBadge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800/60">-</span>
+          </h3>
+          <p class="text-xs text-gray-400">Verificación estricta de solvencia, rentabilidad económica, generación de caja y gobernanza.</p>
+        </div>
+        <div id="checklistVerdict" class="text-xs font-bold text-emerald-400">-</div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs" id="checklistGrid">
+        <!-- Dynamic checklist pills injected here -->
+      </div>
+    </div>
+
+    <!-- Educational CTA Bridge to Taller de Inversiones con IA -->
+    <div class="glass rounded-2xl p-6 sm:p-8 mb-6 border border-cyan-500/40 bg-gradient-to-br from-dark-800/90 via-dark-900/90 to-cyan-950/30 relative overflow-hidden shadow-2xl">
+      <div class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="max-w-2xl text-center md:text-left">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 text-xs font-bold mb-3">
+            <span>🎓 Taller de Inversiones con IA</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            <span>Comunidad @accionesargentinas</span>
+          </div>
+          <h3 class="text-xl sm:text-2xl font-black text-white tracking-tight mb-2">
+            ¿Querés aprender a interpretar balances y usar Inteligencia Artificial para investigar acciones?
+          </h3>
+          <p class="text-xs sm:text-sm text-gray-300 leading-relaxed mb-4">
+            En el <strong>Taller de Inversiones con IA</strong> dictado por <strong>Jorge Marquetti</strong>, aprendés paso a paso a analizar estados contables de la SEC, calibrar modelos de valuación intrínseca y detectar empresas con ventajas competitivas sin depender de gurúes ni fórmulas mágicas.
+          </p>
+          <div class="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-gray-400">
+            <span class="flex items-center gap-1.5">✓ 100% Práctico con Casos Reales</span>
+            <span class="flex items-center gap-1.5">✓ Herramientas Cuantitativas e IA</span>
+            <span class="flex items-center gap-1.5">✓ Sin Conocimientos Previos</span>
+          </div>
+        </div>
+        <div class="flex-shrink-0 text-center w-full md:w-auto">
+          <a href="https://www.educaenlinea.com.ar/web/talleria.html" target="_blank" rel="noopener" 
+             class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-cyan-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            <span>Ver Taller de Inversiones con IA</span>
+          </a>
+          <span class="block text-[10px] text-gray-400 mt-2">Dictado por Jorge Marquetti • @accionesargentinas</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible Methodology & Sources Drawer -->
+    <details class="glass rounded-xl p-4 mb-6 border border-dark-700/70 group">
+      <summary class="cursor-pointer font-bold text-xs text-gray-300 flex items-center justify-between select-none">
+        <span class="flex items-center gap-2">
+          <span>📖 Fuentes de Datos, Tratamiento de Splits y Metodología</span>
+          <span class="text-[10px] bg-dark-700 text-gray-400 px-2 py-0.5 rounded font-normal">Desplegar</span>
+        </span>
+        <svg class="w-4 h-4 text-gray-400 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+      </summary>
+      <div class="mt-3 pt-3 border-t border-dark-700/60 text-xs text-gray-400 space-y-2 leading-relaxed">
+        <p>• <strong>Fuentes de Datos:</strong> Balances anuales auditados 10-K y 20-F reportados ante la SEC (U.S. Securities and Exchange Commission) y cotizaciones de mercado informativas.</p>
+        <p>• <strong>Valoración DCF 10 Años:</strong> Modela flujos libres de caja (CFO − CapEx) con tasa explícita durante 5 años, convergencia en años 6 a 10 y valor residual por perpetuidad. Suma caja y deduce deuda total.</p>
+        <p>• <strong>Reverse DCF:</strong> Resuelve qué crecimiento exige la cotización actual manteniendo los demás supuestos del modelo. Refleja expectativas implícitas del mercado, no proyecciones de analistas.</p>
+        <p>• <strong>Entidades Bancarias:</strong> Se utiliza el modelo de P/B Justificado por Gordon-Shapiro según su rentabilidad sobre patrimonio (ROE), excluyendo FCF industrial y Piotroski estándar no aplicable a balances bancarios.</p>
+      </div>
+    </details>
+
+  </main>
+
+  <!-- Duel Dashboard (Cara a Cara / Head-to-Head) -->
+  <main id="duelDashboard" class="hidden max-w-7xl mx-auto px-4 pb-16 w-full flex-1">
+    
+    <!-- Top Duel Versus Banner -->
+    <div class="glass rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+      <div class="flex flex-col lg:flex-row items-center justify-between gap-6 border-b border-dark-700/60 pb-5">
+        
+        <!-- Ticker A -->
+        <div class="flex-1 w-full bg-dark-800/80 rounded-xl p-4 border border-cyan-500/40 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span id="duelTickerA" class="bg-cyan-950 text-cyan-400 border border-cyan-800/60 text-sm font-extrabold px-3 py-1 rounded-lg">-</span>
+            <span id="duelArchetypeA" class="text-[10px] text-gray-400 truncate max-w-[140px]">-</span>
+          </div>
+          <div id="duelCompNameA" class="text-lg font-black text-white truncate mb-1">-</div>
+          <div class="flex items-baseline gap-2 mb-2">
+            <span id="duelPriceA" class="text-2xl font-black text-white">-</span>
+            <span class="text-xs text-gray-400">USD</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs border-t border-dark-700/50 pt-2">
+            <div>
+              <span class="text-[10px] text-gray-400 block">Fair Value:</span>
+              <strong id="duelFairA" class="text-cyan-400 font-bold">-</strong>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block">Margen Seguridad:</span>
+              <strong id="duelMosA" class="font-extrabold">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Center Lightning VS Badge -->
+        <div class="flex flex-col items-center justify-center">
+          <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-amber-500/30 font-black text-white text-sm mb-1 animate-pulse">
+            VS
+          </div>
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-400">Cara a Cara</span>
+        </div>
+
+        <!-- Ticker B -->
+        <div class="flex-1 w-full bg-dark-800/80 rounded-xl p-4 border border-purple-500/40 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span id="duelTickerB" class="bg-purple-950 text-purple-400 border border-purple-800/60 text-sm font-extrabold px-3 py-1 rounded-lg">-</span>
+            <span id="duelArchetypeB" class="text-[10px] text-gray-400 truncate max-w-[140px]">-</span>
+          </div>
+          <div id="duelCompNameB" class="text-lg font-black text-white truncate mb-1">-</div>
+          <div class="flex items-baseline gap-2 mb-2">
+            <span id="duelPriceB" class="text-2xl font-black text-white">-</span>
+            <span class="text-xs text-gray-400">USD</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs border-t border-dark-700/50 pt-2">
+            <div>
+              <span class="text-[10px] text-gray-400 block">Fair Value:</span>
+              <strong id="duelFairB" class="text-purple-400 font-bold">-</strong>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block">Margen Seguridad:</span>
+              <strong id="duelMosB" class="font-extrabold">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Duel Copy Button -->
+        <div class="flex lg:flex-col gap-2">
+          <button onclick="copyDuelReport()" id="btnCopyDuel" title="Copiar Duelo al Portapapeles" class="h-12 lg:h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-amber-300">Copiar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Duel Subtitle Banner -->
+      <div class="p-3.5 rounded-xl bg-dark-800/80 border border-dark-700/80 text-center text-xs text-gray-300">
+        ⚔️ <strong>Comparativa Simétrica de Fundamentos:</strong> Confrontación indicador por indicador con fuentes oficiales de la SEC.
+      </div>
+    </div>
+
+    <!-- Expected CAGR Cara a Cara -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6">
+      <div class="mb-4 border-b border-dark-700/60 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>Variación Anualizada Esperada a 5 Años (Cara a Cara)</span>
+          <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-medium">Convergencia a Fair Value</span>
+        </h3>
+        <p class="text-xs text-gray-400">Rendimiento anual proyectado de cada empresa si converge a su valor de salida en 5 años.</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-cyan-500/40 text-center">
+          <span id="duelTirTickerA" class="text-xs font-bold text-cyan-400 block mb-1">-</span>
+          <div id="duelTirExpectedA" class="text-3xl font-black text-cyan-300 mb-1">-</div>
+          <span id="duelTirSpreadA" class="text-xs text-gray-400">-</span>
+        </div>
+        <div class="bg-dark-800/80 p-4 rounded-xl border border-purple-500/40 text-center">
+          <span id="duelTirTickerB" class="text-xs font-bold text-purple-400 block mb-1">-</span>
+          <div id="duelTirExpectedB" class="text-3xl font-black text-purple-300 mb-1">-</div>
+          <span id="duelTirSpreadB" class="text-xs text-gray-400">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla Cara a Cara (Tale of the Tape) -->
+    <div class="glass rounded-2xl p-6 shadow-xl mb-6">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Duelo Detallado: Indicador por Indicador (Tale of the Tape)</span>
+            <span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800/60 px-2 py-0.5 rounded font-medium">Auditoría Simétrica</span>
+          </h3>
+          <p class="text-xs text-gray-400">Comparativa directa con identificación objetiva de la ventaja en cada dimensión.</p>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-cyan-400 inline-block"></span><strong id="legendA">-</strong></span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-purple-400 inline-block"></span><strong id="legendB">-</strong></span>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-dark-700 text-gray-400 text-[11px] uppercase tracking-wider">
+              <th class="pb-3 font-semibold w-1/3">Dimensión Financiera</th>
+              <th class="pb-3 font-semibold text-center w-1/4" id="thHeaderA">Ticker A</th>
+              <th class="pb-3 font-semibold text-center w-1/4" id="thHeaderB">Ticker B</th>
+              <th class="pb-3 font-semibold text-center w-1/6">Ventaja</th>
+            </tr>
+          </thead>
+          <tbody id="duelTableBody" class="divide-y divide-dark-700/50">
+            <!-- Dynamic rows injected here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Educational CTA in Duel Mode -->
+    <div class="glass rounded-2xl p-6 sm:p-8 mb-6 border border-cyan-500/40 bg-gradient-to-br from-dark-800/90 via-dark-900/90 to-cyan-950/30 relative overflow-hidden shadow-2xl">
+      <div class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="max-w-2xl text-center md:text-left">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 text-xs font-bold mb-3">
+            <span>🎓 Taller de Inversiones con IA</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            <span>Comunidad @accionesargentinas</span>
+          </div>
+          <h3 class="text-xl sm:text-2xl font-black text-white tracking-tight mb-2">
+            Aprendé a comparar negocios y detectar ventajas competitivas con Inteligencia Artificial
+          </h3>
+          <p class="text-xs sm:text-sm text-gray-300 leading-relaxed mb-4">
+            En el <strong>Taller de Inversiones con IA</strong> con Jorge Marquetti aprendés a contrastar estados contables y entender qué está pagando el mercado.
+          </p>
+        </div>
+        <div class="flex-shrink-0 text-center w-full md:w-auto">
+          <a href="https://www.educaenlinea.com.ar/web/talleria.html" target="_blank" rel="noopener" 
+             class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-amber-500 via-rose-600 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-black text-sm uppercase tracking-wider shadow-xl transition-all">
+            <span>Ver Taller de Inversiones con IA</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none glass px-4 py-3 rounded-xl border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-2xl flex items-center gap-2">
+    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+    <span id="toastMsg">¡Resumen ejecutivo copiado al portapapeles!</span>
+  </div>
+
+  <!-- Footer & Legal Disclaimer -->
+  <footer class="border-t border-dark-700/60 py-10 px-4 text-center text-xs text-gray-500">
+    <div class="mb-6 p-5 rounded-2xl bg-dark-800/80 border border-dark-700/80 text-[11px] text-gray-400 max-w-4xl mx-auto text-left leading-relaxed shadow-xl">
+      <div class="flex items-center gap-2 text-amber-400 font-bold mb-2">
+        <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <span class="text-xs uppercase tracking-wider text-amber-300">Descargo de Responsabilidad Educativo y Legal</span>
+      </div>
+      <p class="text-gray-400">
+        La información provista en esta plataforma tiene fines exclusivamente educativos y de investigación cuantitativa. 
+        <strong class="text-gray-200">No constituye asesoramiento financiero, recomendación de inversión ni solicitud para comprar o vender activo alguno.</strong>
+        Los modelos estocásticos y supuestos parte de estimaciones matemáticas que pueden no cumplirse. Todo inversor debe realizar su propio análisis de debida diligencia o consultar con un asesor matriculado antes de operar. El rendimiento histórico no garantiza resultados futuros.
+      </p>
+      <div class="mt-3 pt-3 border-t border-dark-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[10px] text-gray-500">
+        <span>📌 <strong>Activos subyacentes:</strong> Precios y valuaciones en USD de la acción en Wall Street, no precio en ARS de CEDEARs locales.</span>
+        <span>📊 <strong>Fuentes:</strong> Balances públicos auditados 10-K y 20-F de SEC EDGAR.</span>
+      </div>
+    </div>
+    <p class="text-gray-500">QuantVal Pro • Desarrollado para la comunidad de <a href="https://instagram.com/accionesargentinas" target="_blank" rel="noopener" class="text-pink-400 font-semibold hover:underline">@accionesargentinas</a> • 2026</p>
+  </footer>
+
+  <!-- Application Logic -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
