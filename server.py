@@ -1,77 +1,92 @@
-import sys
+"""QuantVal's public, read-only API and frontend."""
+import copy
+import logging
 import os
-import time
 from pathlib import Path
+import threading
+import time
+from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fetch_financials import VERSION, MODEL_VERSION, ProviderUnavailable, UnsupportedCompany, analyze_ticker, normalize_ticker
 
-# Try local import first, then fallback to relative engine directory
-try:
-    from fetch_financials import analyze_ticker
-except ImportError:
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    ENGINE_DIR = BASE_DIR / ".agent" / "skills" / "equity-valuation" / "scripts"
-    sys.path.append(str(ENGINE_DIR))
-    from fetch_financials import analyze_ticker
-
-app = FastAPI(
-    title="QuantVal Institutional Valuation Engine",
-    description="Fundamental equity valuation platform",
-    version="2.4.0"
-)
-
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Static files path
+app = FastAPI(title="QuantVal — indicadores financieros", version=VERSION)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-# In-memory cache: ticker -> (timestamp, data)
 CACHE = {}
-CACHE_TTL = 900  # 15 minutes
+CACHE_TTL = 900
+MAX_CACHE = 128
+_cache_lock = threading.Lock()
+_inflight = set()
+_condition = threading.Condition(_cache_lock)
+_provider_slots = threading.BoundedSemaphore(2)
+log = logging.getLogger("quantval")
+if "PYTEST_CURRENT_TEST" not in os.environ:
+    os.environ.setdefault("TALLER_URL", "https://www.educaenlinea.com.ar/web/talleria.html")
+
+def release_info():
+    return {"version": VERSION, "model_version": MODEL_VERSION, "commit": os.getenv("RENDER_GIT_COMMIT") or os.getenv("COMMIT_SHA") or "local / no informado"}
 
 @app.get("/")
-async def serve_index():
-    index_file = STATIC_DIR / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="Frontend index.html not found")
-    return FileResponse(str(index_file))
+def index():
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 @app.get("/health")
-async def health_check():
-    return {"status": "ok", "app": "QuantVal Pro", "version": "2.4.0-lead-magnet-final"}
+def health():
+    return {"status": "ok", "app": "QuantVal Pro", **release_info()}
+
+@app.get("/api/config")
+def config():
+    destination = os.getenv("TALLER_URL", "").strip()
+    parsed = urlparse(destination)
+    direct = parsed.scheme == "https" and bool(parsed.netloc) and not parsed.username and not parsed.password
+    return {**release_info(), "taller_url": destination if direct else "https://www.instagram.com/accionesargentinas/", "taller_label": "Ver Taller de Inversiones con IA" if direct else "Pedime información del Taller", "taller_note": "Abrís la información del Taller." if direct else "Abrís el perfil de @accionesargentinas en Instagram."}
 
 @app.get("/api/evaluate/{ticker}")
-async def evaluate_stock(ticker: str, nocache: bool = False):
-    ticker = ticker.strip().upper()
-    now = time.time()
-    
-    # Check cache
-    if not nocache and ticker in CACHE:
-        cached_time, cached_data = CACHE[ticker]
-        if now - cached_time < CACHE_TTL:
-            return cached_data
-            
+def evaluate_stock(ticker: str):
     try:
-        # Run proprietary engine
-        result = analyze_ticker(ticker)
-        CACHE[ticker] = (now, result)
+        symbol = normalize_ticker(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    key = (MODEL_VERSION, symbol)
+    with _condition:
+        if key in _inflight:
+            if not _condition.wait_for(lambda: key not in _inflight, timeout=65):
+                raise HTTPException(status_code=503, detail="El análisis está tardando más de lo esperado. Intentá nuevamente.")
+        cached = CACHE.get(key)
+        if cached and time.monotonic() - cached[0] < CACHE_TTL:
+            result = copy.deepcopy(cached[1])
+            result["cache"] = {"hit": True, "age_seconds": round(time.monotonic() - cached[0])}
+            return result
+        _inflight.add(key)
+    try:
+        if not _provider_slots.acquire(timeout=10):
+            raise HTTPException(status_code=503, detail="Hay otros análisis en curso. Probá nuevamente en unos segundos.")
+        try:
+            result = analyze_ticker(symbol)
+        finally:
+            _provider_slots.release()
+        result["cache"] = {"hit": False, "age_seconds": 0}
+        with _cache_lock:
+            if len(CACHE) >= MAX_CACHE:
+                del CACHE[min(CACHE, key=lambda k: CACHE[k][0])]
+            CACHE[key] = (time.monotonic(), copy.deepcopy(result))
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=f"No se encontraron balances públicos para '{ticker}'. Verificá el símbolo (ej. NVDA, AAPL, JPM, MELI, YPF).")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error evaluando '{ticker}': {str(e)}")
+    except UnsupportedCompany as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProviderUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("No se pudo analizar %s", symbol)
+        raise HTTPException(status_code=500, detail="No pudimos completar el análisis. Intentá nuevamente más tarde.")
+    finally:
+        with _condition:
+            _inflight.discard(key)
+            _condition.notify_all()
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("server:app", host="0.0.0.0", port=port)
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")))

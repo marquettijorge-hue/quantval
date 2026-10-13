@@ -7,3 +7,5 @@ env/
 venv/
 .DS_Store
 *.log
+.pytest_cache/
+qa-preview/
