@@ -874,10 +874,14 @@
         document.getElementById('scenBaseValTop').innerText = `$${sc.base.fair_value.toFixed(2)}`;
       }
       const wsT = d.market_sentiment_and_ownership ? d.market_sentiment_and_ownership.target_mean_price : null;
-      document.getElementById('wsTarget').innerText = (wsT && wsT > 0) ? `$${wsT.toFixed(2)}` : 'N/D';
-      document.getElementById('wsTargetSub').innerText = (d.market_sentiment_and_ownership?.num_analysts > 0) 
-        ? `Consenso de ${d.market_sentiment_and_ownership.num_analysts} analistas` 
-        : 'Consenso institucional';
+      const numAn = d.market_sentiment_and_ownership?.num_analysts || 0;
+      if (wsT && wsT > 0 && numAn > 0) {
+        document.getElementById('wsTarget').innerText = `$${wsT.toFixed(2)}`;
+        document.getElementById('wsTargetSub').innerText = `Consenso de ${numAn} analistas`;
+      } else {
+        document.getElementById('wsTarget').innerText = 'No disponible';
+        document.getElementById('wsTargetSub').innerText = 'Sin cobertura de analistas';
+      }
 
       // 6 Indicadores Fundamentales Auditados
       renderCoreIndicators(d.core_indicators);
@@ -1193,6 +1197,9 @@
         `- **Precio Actual:** $${v.current_price.toFixed(2)} USD`,
         `- **Fair Value Ponderado E[V]:** $${v.composite_fair_value.toFixed(2)} USD`,
         `- **Margen de Seguridad (MoS):** ${v.margin_of_safety_pct !== null ? (v.margin_of_safety_pct > 0 ? '+' : '') + v.margin_of_safety_pct.toFixed(2) + '%' : 'N/D'}`,
+        ...((d.market_sentiment_and_ownership?.target_mean_price > 0 && d.market_sentiment_and_ownership?.num_analysts > 0)
+          ? [`- **Precio Objetivo Analistas:** $${d.market_sentiment_and_ownership.target_mean_price.toFixed(2)} USD (Consenso de ${d.market_sentiment_and_ownership.num_analysts} analistas)`]
+          : []),
         ``,
         `### 6 Indicadores Fundamentales Verificados (SEC 10-K / TTM)`,
         ...(d.core_indicators || []).map(ci => `- **${ci.name}:** ${ci.formatted} *(${ci.source})*`),
