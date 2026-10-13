@@ -316,19 +316,21 @@ function renderReverseDcf(d) {
 
   if (!revGrowthEl) return;
 
-  if (rev.solved && rev.implied_fcf_growth_5y_pct !== null && rev.implied_fcf_growth_5y_pct !== undefined) {
-    const gPct = rev.implied_fcf_growth_5y_pct;
+  const isResolved = rev.status === "resolved" || rev.solved;
+  const gPct = rev.implied_growth_pct !== undefined ? rev.implied_growth_pct : rev.implied_fcf_growth_5y_pct;
+
+  if (isResolved && gPct !== null && gPct !== undefined && Number.isFinite(gPct)) {
     revGrowthEl.innerText = `${gPct > 0 ? '+' : ''}${gPct.toFixed(1)}% anual (5 años)`;
-    revGrowthEl.className = "text-2xl sm:text-3xl font-black text-cyan-400";
+    revGrowthEl.className = "text-3xl sm:text-4xl font-black text-cyan-400 mb-2";
     if (revTextEl) {
-      revTextEl.innerText = `Con estos supuestos, para justificar la cotización actual de mercado de $${(d.quote?.price || d.valuation_summary?.current_price || 0).toFixed(2)} USD, el flujo de caja libre exige crecer a una tasa compuesta del ${gPct.toFixed(1)}% anual durante los próximos 5 años.`;
+      revTextEl.innerText = rev.text || `Con estos supuestos, para justificar la cotización actual de mercado de $${(d.quote?.price || d.valuation_summary?.current_price || 0).toFixed(2)} USD, el flujo de caja libre exige crecer a una tasa compuesta del ${gPct.toFixed(1)}% anual durante los próximos 5 años.`;
     }
     if (revParamsEl) {
-      revParamsEl.innerText = `Supuestos aplicados: WACC ${(rev.wacc_assumed_pct || 10).toFixed(1)}% • Tasa Terminal Perpetua g ${(rev.terminal_g_assumed_pct || 2.5).toFixed(1)}%`;
+      revParamsEl.innerText = `Supuestos aplicados: WACC ${(rev.wacc_assumed_pct || 10).toFixed(1)}% • Tasa Terminal Perpetua g ${(rev.terminal_g_pct || rev.terminal_g_assumed_pct || 2.5).toFixed(1)}%`;
     }
   } else {
     revGrowthEl.innerText = "No pudo resolverse";
-    revGrowthEl.className = "text-xl font-bold text-gray-400";
+    revGrowthEl.className = "text-xl font-bold text-gray-400 mb-2";
     if (revTextEl) {
       revTextEl.innerText = rev.note || "No existe una tasa matemática de crecimiento dentro del intervalo analizado (-50% a +150%) que iguale la cotización actual bajo el modelo DCF.";
     }
@@ -485,38 +487,50 @@ function onScenarioWeightChange() {
 function renderExpectedCagr(cagr) {
   if (!cagr) return;
 
+  const expVal = cagr.cagr_expected_pct !== undefined ? cagr.cagr_expected_pct : cagr.cagr_expected_weighted_pct;
   const expEl = document.getElementById("tirExpected");
-  if (expEl) expEl.innerText = `${cagr.cagr_expected_weighted_pct >= 0 ? '+' : ''}${cagr.cagr_expected_weighted_pct.toFixed(1)}%`;
+  if (expEl && expVal !== undefined && expVal !== null) {
+    expEl.innerText = `${expVal >= 0 ? '+' : ''}${expVal.toFixed(1)}%`;
+  }
 
+  const baseVal = cagr.cagr_base_pct;
   const baseEl = document.getElementById("tirBase");
-  if (baseEl) baseEl.innerText = `${cagr.cagr_base_pct >= 0 ? '+' : ''}${cagr.cagr_base_pct.toFixed(1)}%`;
+  if (baseEl && baseVal !== undefined && baseVal !== null) {
+    baseEl.innerText = `${baseVal >= 0 ? '+' : ''}${baseVal.toFixed(1)}%`;
+  }
 
+  const bullVal = cagr.cagr_bull_pct;
   const bullEl = document.getElementById("tirBull");
-  if (bullEl) bullEl.innerText = `${cagr.cagr_bull_pct >= 0 ? '+' : ''}${cagr.cagr_bull_pct.toFixed(1)}%`;
+  if (bullEl && bullVal !== undefined && bullVal !== null) {
+    bullEl.innerText = `${bullVal >= 0 ? '+' : ''}${bullVal.toFixed(1)}%`;
+  }
 
+  const bearVal = cagr.cagr_bear_pct;
   const bearEl = document.getElementById("tirBear");
-  if (bearEl) bearEl.innerText = `${cagr.cagr_bear_pct >= 0 ? '+' : ''}${cagr.cagr_bear_pct.toFixed(1)}%`;
+  if (bearEl && bearVal !== undefined && bearVal !== null) {
+    bearEl.innerText = `${bearVal >= 0 ? '+' : ''}${bearVal.toFixed(1)}%`;
+  }
 
+  const spSpread = cagr.sp500_spread_pct;
   const spEl = document.getElementById("tirSpSpread");
-  if (spEl) {
-    const spSpread = cagr.sp500_spread_pct;
+  if (spEl && spSpread !== undefined && spSpread !== null) {
     spEl.innerText = `${spSpread >= 0 ? '+' : ''}${spSpread.toFixed(1)}% pts`;
     spEl.className = spSpread >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold";
   }
 
+  const trSpread = cagr.treasury_spread_pct;
   const trEl = document.getElementById("tirTreasurySpread");
-  if (trEl) {
-    const trSpread = cagr.treasury_spread_pct;
+  if (trEl && trSpread !== undefined && trSpread !== null) {
     trEl.innerText = `${trSpread >= 0 ? '+' : ''}${trSpread.toFixed(1)}% pts`;
     trEl.className = trSpread >= 0 ? "text-emerald-400 font-bold" : "text-amber-400 font-bold";
   }
 
   const badge = document.getElementById("cagrVerdictBadge");
   if (badge) {
-    badge.innerText = cagr.cagr_verdict || "Convergencia a Fair Value";
-    if (cagr.cagr_expected_weighted_pct >= 12.0) {
+    badge.innerText = cagr.verdict || cagr.cagr_verdict || "Convergencia a Fair Value";
+    if (expVal !== undefined && expVal >= 12.0) {
       badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-800/60 self-start md:self-auto";
-    } else if (cagr.cagr_expected_weighted_pct >= 5.0) {
+    } else if (expVal !== undefined && expVal >= 4.0) {
       badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-950 text-amber-300 border border-amber-800/60 self-start md:self-auto";
     } else {
       badge.className = "text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-950 text-rose-300 border border-rose-800/60 self-start md:self-auto";
@@ -529,7 +543,8 @@ function renderExpectedCagr(cagr) {
 // -------------------------------------------------------------
 function initSensitivitySliders(d) {
   const v = d.valuation || {};
-  baseGrowth = Math.max(-10, Math.min(45, (v.growth ? v.growth * 100 : (d.reverse_dcf?.implied_fcf_growth_5y_pct || 14))));
+  const impliedG = d.reverse_dcf?.implied_growth_pct !== undefined ? d.reverse_dcf.implied_growth_pct : (d.reverse_dcf?.implied_fcf_growth_5y_pct || 14);
+  baseGrowth = Math.max(-10, Math.min(45, (v.growth ? v.growth * 100 : impliedG)));
   baseWacc = Math.max(6, Math.min(16, (v.wacc ? v.wacc * 100 : 9.5)));
   baseMultiple = d.archetype === "FINANCIALS_BANKING" ? 1.5 : (v.fair_pe_benchmark || 20.0);
   baseFairValue = d.valuation_summary?.composite_fair_value || 100;
@@ -646,8 +661,10 @@ function recalculateSensitivity() {
 
   const breakevenEl = document.getElementById("simBreakevenNote");
   if (breakevenEl) {
-    const impliedG = currentData.reverse_dcf?.implied_fcf_growth_5y_pct;
-    if (impliedG !== null && impliedG !== undefined) {
+    const impliedG = currentData.reverse_dcf?.implied_growth_pct !== undefined 
+      ? currentData.reverse_dcf.implied_growth_pct 
+      : currentData.reverse_dcf?.implied_fcf_growth_5y_pct;
+    if (impliedG !== null && impliedG !== undefined && Number.isFinite(impliedG)) {
       const diffG = g - impliedG;
       breakevenEl.innerText = `El precio cruza a subvaluación a partir de un crecimiento > ${impliedG.toFixed(1)}% anual (actual sim: ${diffG >= 0 ? '+' : ''}${diffG.toFixed(1)}% spread).`;
     } else {
@@ -668,10 +685,10 @@ function renderQualityScorecard(d) {
   const piotBarEl = document.getElementById("piotBar");
   const piotNoteEl = document.getElementById("piotNote");
 
-  if (isBank) {
+  if (isBank || piot.status === "not_applicable") {
     if (piotScoreEl) piotScoreEl.innerText = "N/A Bancos";
     if (piotBarEl) piotBarEl.style.width = "100%";
-    if (piotNoteEl) piotNoteEl.innerText = "No aplicable a entidades financieras/bancarias (Basilea III / estructura de balance de intermediación).";
+    if (piotNoteEl) piotNoteEl.innerText = piot.reason || "No aplicable a entidades financieras/bancarias (Basilea III / estructura de balance de intermediación).";
   } else {
     const score = piot.score !== undefined ? piot.score : (piot.total_score || 0);
     const maxAvail = piot.max_available || 6;
@@ -683,27 +700,28 @@ function renderQualityScorecard(d) {
   }
 
   // Mayer 100-Baggers
+  const mayer = d.mayer_100_bagger_metrics || {};
   const mayerTitleEl = document.getElementById("mayerTitle");
   const mayerRoicEl = document.getElementById("mayerRoic");
   const mayerBenchEl = document.getElementById("mayerBenchmark");
   const roicSpreadEl = document.getElementById("roicSpread");
 
-  if (isBank) {
+  if (isBank || mayer.model === "banking_roe") {
     if (mayerTitleEl) mayerTitleEl.innerText = "Retorno s/ Patrimonio (ROE)";
-    const roeVal = d.mayer_100_bagger_metrics?.return_val_pct || 14.5;
-    const keVal = d.mayer_100_bagger_metrics?.cost_val_pct || 9.75;
-    const spreadRoe = roeVal - keVal;
+    const roeVal = mayer.return_val_pct !== undefined ? mayer.return_val_pct : 16.1;
+    const keVal = mayer.cost_val_pct !== undefined ? mayer.cost_val_pct : 9.75;
+    const spreadRoe = mayer.spread_pct !== undefined ? mayer.spread_pct : (roeVal - keVal);
     if (mayerRoicEl) mayerRoicEl.innerText = `${roeVal.toFixed(1)}%`;
-    if (mayerBenchEl) mayerBenchEl.innerText = `Coste de Capital Ke: ${keVal.toFixed(1)}%`;
+    if (mayerBenchEl) mayerBenchEl.innerText = `Coste de Capital Ke: ${keVal.toFixed(2)}%`;
     if (roicSpreadEl) {
       roicSpreadEl.innerText = `Spread ROE vs Ke: ${spreadRoe >= 0 ? '+' : ''}${spreadRoe.toFixed(1)}% pts`;
       roicSpreadEl.className = spreadRoe >= 0 ? "text-xs font-bold text-emerald-400" : "text-xs font-bold text-rose-400";
     }
   } else {
     if (mayerTitleEl) mayerTitleEl.innerText = "ROIC (Christopher Mayer)";
-    const roicVal = d.mayer_100_bagger_metrics?.roic !== undefined ? (d.mayer_100_bagger_metrics.roic * 100) : (d.mayer_100_bagger_metrics?.return_val_pct || 18.0);
-    const waccVal = d.cost_of_capital?.wacc ? (d.cost_of_capital.wacc * 100) : 9.5;
-    const spreadRoic = roicVal - waccVal;
+    const roicVal = mayer.return_val_pct !== undefined ? mayer.return_val_pct : (mayer.roic ? mayer.roic * 100 : 18.0);
+    const waccVal = mayer.cost_val_pct !== undefined ? mayer.cost_val_pct : (d.cost_of_capital?.wacc ? d.cost_of_capital.wacc * 100 : 9.75);
+    const spreadRoic = mayer.spread_pct !== undefined ? mayer.spread_pct : (roicVal - waccVal);
     if (mayerRoicEl) mayerRoicEl.innerText = `${roicVal.toFixed(1)}%`;
     if (mayerBenchEl) mayerBenchEl.innerText = `Umbral Mayer: > 15% | WACC: ${waccVal.toFixed(1)}%`;
     if (roicSpreadEl) {
@@ -713,22 +731,23 @@ function renderQualityScorecard(d) {
   }
 
   // Altman Solvency
+  const alt = d.altman_solvency || {};
   const altTitleEl = document.getElementById("altmanTitle");
   const altScoreEl = document.getElementById("altmanScore");
   const altZoneEl = document.getElementById("altmanZone");
 
-  if (isBank) {
-    if (altTitleEl) altTitleEl.innerText = "Solvencia Bancaria (Patrimonio)";
-    const eqRatio = d.altman_solvency?.equity_ratio_pct || 10.2;
-    if (altScoreEl) altScoreEl.innerText = `${eqRatio.toFixed(1)}%`;
+  if (isBank || alt.status === "not_applicable") {
+    if (altTitleEl) altTitleEl.innerText = "Solvencia Bancaria (Patrimonio/Activos)";
+    const scoreVal = alt.score !== undefined ? alt.score : 8.2;
+    if (altScoreEl) altScoreEl.innerText = `${scoreVal.toFixed(1)}%`;
     if (altZoneEl) {
-      altZoneEl.innerText = d.altman_solvency?.zone || "Solvente (Basilea III)";
+      altZoneEl.innerText = alt.category || "Capitalización Adecuada";
       altZoneEl.className = "text-xs font-bold text-emerald-400 mb-1";
     }
   } else {
-    const alt = d.altman_solvency || {};
-    if (altTitleEl) altTitleEl.innerText = alt.model_used || "Altman Solvencia";
-    if (altScoreEl) altScoreEl.innerText = alt.z_score !== undefined ? alt.z_score.toFixed(2) : "N/D";
+    if (altTitleEl) altTitleEl.innerText = alt.model_used || "Altman Solvencia (Industrial)";
+    const scoreVal = alt.score !== undefined ? alt.score : alt.z_score;
+    if (altScoreEl) altScoreEl.innerText = scoreVal !== undefined && scoreVal !== null ? scoreVal.toFixed(2) : "N/D";
     if (altZoneEl) {
       altZoneEl.innerText = alt.zone || "Zona Segura";
       altZoneEl.className = (alt.zone && (alt.zone.includes("Peligro") || alt.zone.includes("Distress"))) ? "text-xs font-bold text-rose-400 mb-1" : "text-xs font-bold text-emerald-400 mb-1";
@@ -740,9 +759,8 @@ function renderQualityScorecard(d) {
 // Checklist Fundamental de Due Diligence (8 Criterios)
 // -------------------------------------------------------------
 function renderChecklist(d) {
-  const isBank = (d.archetype === "FINANCIALS_BANKING" || d.financial_sector);
-  const ch = d.checklist_due_diligence || {};
-  const items = ch.criteria || [];
+  const ch = d.checklist_due_diligence;
+  const items = Array.isArray(ch) ? ch : (ch?.criteria || []);
 
   const badge = document.getElementById("checklistScoreBadge");
   const verd = document.getElementById("checklistVerdict");
@@ -752,22 +770,23 @@ function renderChecklist(d) {
   grid.innerHTML = "";
 
   if (items.length > 0) {
-    let passedCount = ch.passed_count !== undefined ? ch.passed_count : items.filter(x => x.pass).length;
-    if (badge) badge.innerText = `${passedCount}/8 Aprobados`;
-    if (verd) verd.innerText = ch.verdict || (passedCount >= 6 ? "Calidad Fundamental Sobresaliente" : "Calidad Adecuada con Puntos a Monitorear");
+    const passedCount = items.filter(x => x.passed || x.pass).length;
+    if (badge) badge.innerText = `${passedCount}/${items.length} Aprobados`;
+    if (verd) verd.innerText = passedCount >= 6 ? "Calidad Fundamental Sobresaliente" : "Calidad Adecuada con Puntos a Monitorear";
 
     items.forEach(it => {
+      const isPassed = Boolean(it.passed || it.pass);
       const card = document.createElement("div");
-      card.className = `p-3 rounded-xl border ${it.pass ? 'bg-emerald-950/20 border-emerald-800/40 text-gray-200' : 'bg-rose-950/20 border-rose-800/40 text-gray-300'}`;
+      card.className = `p-3 rounded-xl border ${isPassed ? 'bg-emerald-950/20 border-emerald-800/40 text-gray-200' : 'bg-rose-950/20 border-rose-800/40 text-gray-300'}`;
       card.innerHTML = `
         <div class="flex items-center justify-between mb-1">
-          <span class="font-bold text-xs ${it.pass ? 'text-emerald-400' : 'text-rose-400'} flex items-center gap-1">
-            <span>${it.pass ? '✓' : '✗'}</span>
-            <span>${it.name}</span>
+          <span class="font-bold text-xs ${isPassed ? 'text-emerald-400' : 'text-rose-400'} flex items-center gap-1">
+            <span>${isPassed ? '✓' : '✗'}</span>
+            <span>${it.title || it.name}</span>
           </span>
         </div>
-        <div class="text-[11px] font-semibold text-white mb-0.5">${it.metric || 'N/D'}</div>
-        <div class="text-[10px] text-gray-400 leading-tight">${it.detail || ''}</div>
+        <div class="text-[11px] font-semibold text-white mb-0.5">${it.value || it.metric || 'N/D'}</div>
+        <div class="text-[10px] text-gray-400 leading-tight">${it.criteria || it.detail || ''}</div>
       `;
       grid.appendChild(card);
     });
