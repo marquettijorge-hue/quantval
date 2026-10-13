@@ -365,6 +365,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
         },
         "expected_5y_cagr": {
             "cagr_expected_pct": cagr_exp,
+            "cagr_expected_weighted_pct": cagr_exp,
             "cagr_base_pct": cagr_base,
             "cagr_bear_pct": cagr_bear,
             "cagr_bull_pct": cagr_bull,

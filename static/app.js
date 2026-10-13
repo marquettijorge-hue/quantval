@@ -934,20 +934,22 @@ function renderDuelDashboard(dA, dB) {
   // 5-Year CAGR Cara a Cara
   const cagrA = dA.expected_5y_cagr || dA.valuation?.expected_5y_cagr || {};
   const cagrB = dB.expected_5y_cagr || dB.valuation?.expected_5y_cagr || {};
+  const cagrValA = cagrA.cagr_expected_pct !== undefined ? cagrA.cagr_expected_pct : cagrA.cagr_expected_weighted_pct;
+  const cagrValB = cagrB.cagr_expected_pct !== undefined ? cagrB.cagr_expected_pct : cagrB.cagr_expected_weighted_pct;
 
   const tirTickerA = document.getElementById("duelTirTickerA");
   if (tirTickerA) tirTickerA.innerText = dA.symbol || dA.ticker;
   const tirExpectedA = document.getElementById("duelTirExpectedA");
-  if (tirExpectedA) tirExpectedA.innerText = `${(cagrA.cagr_expected_weighted_pct || 0) >= 0 ? '+' : ''}${(cagrA.cagr_expected_weighted_pct || 0).toFixed(1)}%`;
+  if (tirExpectedA) tirExpectedA.innerText = cagrValA !== null && cagrValA !== undefined ? `${cagrValA >= 0 ? '+' : ''}${cagrValA.toFixed(1)}%` : "N/D";
   const tirSpreadA = document.getElementById("duelTirSpreadA");
-  if (tirSpreadA) tirSpreadA.innerText = `${(cagrA.sp500_spread_pct || 0) >= 0 ? '+' : ''}${(cagrA.sp500_spread_pct || 0).toFixed(1)}% vs S&P 500`;
+  if (tirSpreadA) tirSpreadA.innerText = cagrA.sp500_spread_pct !== null && cagrA.sp500_spread_pct !== undefined ? `${cagrA.sp500_spread_pct >= 0 ? '+' : ''}${cagrA.sp500_spread_pct.toFixed(1)}% vs S&P 500` : "N/D vs S&P 500";
 
   const tirTickerB = document.getElementById("duelTirTickerB");
   if (tirTickerB) tirTickerB.innerText = dB.symbol || dB.ticker;
   const tirExpectedB = document.getElementById("duelTirExpectedB");
-  if (tirExpectedB) tirExpectedB.innerText = `${(cagrB.cagr_expected_weighted_pct || 0) >= 0 ? '+' : ''}${(cagrB.cagr_expected_weighted_pct || 0).toFixed(1)}%`;
+  if (tirExpectedB) tirExpectedB.innerText = cagrValB !== null && cagrValB !== undefined ? `${cagrValB >= 0 ? '+' : ''}${cagrValB.toFixed(1)}%` : "N/D";
   const tirSpreadB = document.getElementById("duelTirSpreadB");
-  if (tirSpreadB) tirSpreadB.innerText = `${(cagrB.sp500_spread_pct || 0) >= 0 ? '+' : ''}${(cagrB.sp500_spread_pct || 0).toFixed(1)}% vs S&P 500`;
+  if (tirSpreadB) tirSpreadB.innerText = cagrB.sp500_spread_pct !== null && cagrB.sp500_spread_pct !== undefined ? `${cagrB.sp500_spread_pct >= 0 ? '+' : ''}${cagrB.sp500_spread_pct.toFixed(1)}% vs S&P 500` : "N/D vs S&P 500";
 
   renderDuelTable(dA, dB);
 }
@@ -972,6 +974,11 @@ function renderDuelTable(dA, dB) {
   const fB = dB.latest_financials || {};
   const isBankA = (dA.archetype === "FINANCIALS_BANKING" || dA.financial_sector);
   const isBankB = (dB.archetype === "FINANCIALS_BANKING" || dB.financial_sector);
+
+  const cagrA = dA.expected_5y_cagr || dA.valuation?.expected_5y_cagr || {};
+  const cagrB = dB.expected_5y_cagr || dB.valuation?.expected_5y_cagr || {};
+  const cagrValA = cagrA.cagr_expected_pct !== undefined ? cagrA.cagr_expected_pct : cagrA.cagr_expected_weighted_pct;
+  const cagrValB = cagrB.cagr_expected_pct !== undefined ? cagrB.cagr_expected_pct : cagrB.cagr_expected_weighted_pct;
 
   const rows = [
     {
@@ -1017,8 +1024,8 @@ function renderDuelTable(dA, dB) {
     {
       name: "Variación CAGR 5 Años",
       desc: "Apreciación geométrica anual esperada",
-      valA: cagrA.cagr_expected_weighted_pct,
-      valB: cagrB.cagr_expected_weighted_pct,
+      valA: cagrValA,
+      valB: cagrValB,
       fmt: v => v !== null && v !== undefined ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : "N/D",
       cmp: (a, b) => (a === null || b === null) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
     }
