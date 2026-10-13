@@ -89,7 +89,8 @@ def request_json(url, *, sec=False):
                 time.sleep(wait)
             _last_sec_request = time.monotonic()
     try:
-        response = requests.get(url, headers=HEADERS if sec else {"User-Agent": HEADERS["User-Agent"]}, timeout=15 if sec else 8)
+        req_headers = HEADERS if sec else {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "Accept": "application/json, text/plain, */*"}
+        response = requests.get(url, headers=req_headers, timeout=15 if sec else 8)
         response.raise_for_status()
         return response.json()
     except (requests.RequestException, ValueError) as exc:
@@ -493,27 +494,29 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None)
 
 def fetch_quote(symbol):
     empty = {"status": "missing", "price": None, "currency": None, "as_of": None, "provider": "Yahoo Finance", "url": f"https://finance.yahoo.com/quote/{quote(symbol, safe='-')}/", "note": "Cotización no disponible; el análisis de balances sigue siendo válido."}
-    try:
-        raw = request_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol, safe='-')}?interval=1d&range=5d")
-        if not isinstance(raw, dict) or not isinstance(raw.get("chart"), dict):
-            return empty
-        results = raw.get("chart", {}).get("result") or []
-        if not isinstance(results, list) or not results or not isinstance(results[0], dict):
-            return empty
-        meta = results[0].get("meta", {}) if results else {}
-        if not isinstance(meta, dict):
-            return empty
-        price, timestamp = number(meta.get("regularMarketPrice")), number(meta.get("regularMarketTime"))
-        currency = meta.get("currency")
-        if price is None or price <= 0 or timestamp is None or not currency:
-            return empty
-        as_of = datetime.fromtimestamp(timestamp, timezone.utc)
-        if as_of > datetime.now(timezone.utc):
-            return empty
-        age = (datetime.now(timezone.utc) - as_of).total_seconds()
-        return {**empty, "price": price, "currency": currency, "as_of": as_of.isoformat(), "status": "stale" if age > 7 * 86400 else "available", "note": "Cotización informativa con posible demora; fecha proporcionada por Yahoo Finance. No se garantiza tiempo real."}
-    except (ProviderUnavailable, TypeError, ValueError, OverflowError, OSError):
-        return empty
+    for base in ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"):
+        try:
+            raw = request_json(f"{base}/v8/finance/chart/{quote(symbol, safe='-')}?interval=1d&range=5d")
+            if not isinstance(raw, dict) or not isinstance(raw.get("chart"), dict):
+                continue
+            results = raw.get("chart", {}).get("result") or []
+            if not isinstance(results, list) or not results or not isinstance(results[0], dict):
+                continue
+            meta = results[0].get("meta", {}) if results else {}
+            if not isinstance(meta, dict):
+                continue
+            price, timestamp = number(meta.get("regularMarketPrice")), number(meta.get("regularMarketTime"))
+            currency = meta.get("currency")
+            if price is None or price <= 0 or timestamp is None or not currency:
+                continue
+            as_of = datetime.fromtimestamp(timestamp, timezone.utc)
+            if as_of > datetime.now(timezone.utc):
+                continue
+            age = (datetime.now(timezone.utc) - as_of).total_seconds()
+            return {**empty, "price": price, "currency": currency, "as_of": as_of.isoformat(), "status": "stale" if age > 7 * 86400 else "available", "note": "Cotización informativa con posible demora; fecha proporcionada por Yahoo Finance. No se garantiza tiempo real."}
+        except (ProviderUnavailable, TypeError, ValueError, OverflowError, OSError):
+            continue
+    return empty
 
 def analyze_ticker(ticker_sym):
     symbol = normalize_ticker(ticker_sym)
