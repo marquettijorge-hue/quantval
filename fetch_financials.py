@@ -319,8 +319,16 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
     ev_weighted = round((w_bear * v_bear) + (w_base * v_base) + (w_bull * v_bull), 2)
     
     # Strict separation of Margin of Safety vs Delta over Market Price
-    mos = round(((ev_weighted - current_price) / ev_weighted * 100.0), 1) if current_price and ev_weighted > 0 else None
-    delta_vs_price = round(((ev_weighted - current_price) / current_price * 100.0), 1) if current_price and current_price > 0 else None
+    if current_price and ev_weighted > 0:
+        raw_mos = ((ev_weighted - current_price) / ev_weighted * 100.0)
+        mos = round(max(0.0, raw_mos), 1) if raw_mos > 0 else 0.0
+        premium_pct = round(((current_price - ev_weighted) / ev_weighted * 100.0), 1) if current_price > ev_weighted else 0.0
+        raw_delta = ((ev_weighted - current_price) / current_price * 100.0)
+        delta_vs_price = round(max(-100.0, raw_delta), 1)
+    else:
+        mos = None
+        premium_pct = None
+        delta_vs_price = None
 
     # Reverse DCF implied growth
     rev_g = solve_reverse_dcf(current_price, start_fcf, shares, cash, debt, wacc_base) if current_price else None
@@ -346,6 +354,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
         "composite_fair_value": ev_weighted,
         "margin_of_safety_pct": mos,
         "delta_vs_price_pct": delta_vs_price,
+        "premium_pct": premium_pct,
         "fcf_base": start_fcf,
         "shares": shares,
         "cash": cash,
@@ -426,8 +435,16 @@ def build_banking_valuation(equity, prior_equity, net_income, shares, current_pr
     # Justified P/B = (ROE - g) / (Ke - g)
     justified_pb = round(max(0.5, (roe - g) / max(0.02, ke - g)), 2)
     fair_val = round(bvps * justified_pb, 2)
-    mos = round((fair_val - current_price) / fair_val * 100.0, 1) if current_price and fair_val > 0 else None
-    delta_vs_price = round((fair_val - current_price) / current_price * 100.0, 1) if current_price and current_price > 0 else None
+    if current_price and fair_val > 0:
+        raw_mos = (fair_val - current_price) / fair_val * 100.0
+        mos = round(max(0.0, raw_mos), 1) if raw_mos > 0 else 0.0
+        premium_pct = round((current_price - fair_val) / fair_val * 100.0, 1) if current_price > fair_val else 0.0
+        raw_delta = (fair_val - current_price) / current_price * 100.0
+        delta_vs_price = round(max(-100.0, raw_delta), 1)
+    else:
+        mos = None
+        premium_pct = None
+        delta_vs_price = None
     
     return {
         "status": "not_available",  # Preserves test_bank_never_gets_industrial_cash_flow_or_valuation assertion
@@ -439,6 +456,7 @@ def build_banking_valuation(equity, prior_equity, net_income, shares, current_pr
         "composite_fair_value": fair_val,
         "margin_of_safety_pct": mos,
         "delta_vs_price_pct": delta_vs_price,
+        "premium_pct": premium_pct,
         "roe_pct": round(roe * 100.0, 2),
         "cost_of_equity_pct": round(ke * 100.0, 2),
         "current_price": current_price
@@ -667,7 +685,7 @@ def evaluate_quality_and_checklist(financial_sector, revenue, net_income, operat
 
     return piotroski, mayer, altman, checklist
 
-def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None):
+def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None, consensus=None):
     today = today or datetime.now(timezone.utc).date()
     rows = {k: records(facts, k, today) for k in TAGS}
     anchor = choose(annual_rows(rows["revenue"])) or choose(annual_rows(rows["net_income"])) or choose(annual_rows(rows["cfo"]))
@@ -768,18 +786,20 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None)
         verdict = "SUBVALUADA / AMPLIO MARGEN DE SEGURIDAD"
     elif mos >= 10.0:
         verdict = "VALORACIÓN ATRACTIVA / MARGEN MODERADO"
-    elif mos >= -10.0:
+    elif delta_vs_price is not None and abs(delta_vs_price) <= 10.0:
         verdict = "VALOR RAZONABLE / FAIR VALUE"
     else:
         verdict = "SOBREVALORADA / SIN MARGEN DE SEGURIDAD"
 
     is_manual = bool(quote.get("is_manual", False)) if quote else False
+    premium_pct = valuation.get("premium_pct", 0.0)
     valuation_summary = {
         "verdict": verdict,
         "composite_fair_value": fair_val,
         "current_price": current_price,
         "margin_of_safety_pct": mos,
         "delta_vs_price_pct": delta_vs_price,
+        "premium_pct": premium_pct,
         "price_source": quote.get("provider", "Mercado") if quote else "No disponible",
         "price_date": quote.get("as_of") if quote else None,
         "is_manual": is_manual
@@ -913,7 +933,8 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None)
         "piotroski_fscore": piotroski,
         "altman_solvency": altman,
         "mayer_100_bagger_metrics": mayer,
-        "checklist_due_diligence": checklist
+        "checklist_due_diligence": checklist,
+        "wall_street_consensus": consensus
     }
 
 def fetch_quote(symbol):
@@ -959,22 +980,97 @@ def fetch_quote(symbol):
 
     return empty
 
+def fetch_wall_street_consensus(symbol):
+    empty = {
+        "status": "missing",
+        "target_price": None,
+        "recommendation_score": None,
+        "recommendation_label": "No disponible",
+        "forward_pe": None,
+        "source": "Wall Street Consensus",
+        "disclaimer": "Estimaciones públicas compiladas de analistas de Wall Street."
+    }
+    # 1. Finviz parser
+    try:
+        url = f"https://finviz.com/quote.ashx?t={symbol}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
+        r = requests.get(url, headers=headers, timeout=4)
+        if r.status_code == 200:
+            target_match = re.search(r'Target Price.*?<span[^>]*>([0-9.]+)</span>', r.text)
+            recom_match = re.search(r'>Recom<.*?<span[^>]*>([0-9.]+)</span>', r.text)
+            pe_fwd_match = re.search(r'Forward P/E.*?<span[^>]*>([0-9.]+)</span>', r.text)
+            target_val = float(target_match.group(1)) if target_match else None
+            recom_val = float(recom_match.group(1)) if recom_match else None
+            pe_fwd_val = float(pe_fwd_match.group(1)) if pe_fwd_match else None
+            if target_val or recom_val:
+                recom_label = "Fuerte Compra" if recom_val and recom_val <= 1.5 else (
+                    "Compra" if recom_val and recom_val <= 2.2 else (
+                        "Mantener" if recom_val and recom_val <= 3.2 else (
+                            "Bajo Rendimiento" if recom_val else "Consenso de Mercado"
+                        )
+                    )
+                )
+                return {
+                    "status": "available",
+                    "target_price": target_val,
+                    "recommendation_score": recom_val,
+                    "recommendation_label": recom_label,
+                    "forward_pe": pe_fwd_val,
+                    "source": "Wall Street Consensus (Finviz / FactSet)",
+                    "disclaimer": "Compilación de estimaciones de analistas de inversión de Wall Street."
+                }
+    except Exception:
+        pass
+
+    # 2. TradingView fallback for institutional mark
+    try:
+        tv_url = "https://scanner.tradingview.com/america/scan"
+        payload = {"symbols": {"tickers": [f"NASDAQ:{symbol}", f"NYSE:{symbol}", f"AMEX:{symbol}"]}, "columns": ["close", "currency", "recommendation_mark"]}
+        res = requests.post(tv_url, json=payload, headers={"User-Agent": "Mozilla/5.0"}, timeout=4)
+        if res.status_code == 200:
+            for row in res.json().get("data", []):
+                d = row.get("d")
+                if d and len(d) >= 3 and d[2] is not None:
+                    rec_val = round(float(d[2]), 2)
+                    recom_label = "Fuerte Compra" if rec_val <= 1.5 else (
+                        "Compra" if rec_val <= 2.2 else (
+                            "Mantener" if rec_val <= 3.2 else "Consenso de Mercado"
+                        )
+                    )
+                    return {
+                        "status": "partial",
+                        "target_price": None,
+                        "recommendation_score": rec_val,
+                        "recommendation_label": recom_label,
+                        "forward_pe": None,
+                        "source": "TradingView Institutional Mark",
+                        "disclaimer": "Puntaje de recomendación de analistas compilado por TradingView."
+                    }
+    except Exception:
+        pass
+
+    return empty
+
 def analyze_ticker(ticker_sym, manual_price=None):
     symbol = normalize_ticker(ticker_sym)
     company = resolve_company(symbol)
     cik = int(company["cik_str"])
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         submission_future = pool.submit(request_json, f"https://data.sec.gov/submissions/CIK{cik:010d}.json", sec=True)
         facts_future = pool.submit(request_json, f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json", sec=True)
         quote_future = pool.submit(fetch_quote, symbol) if manual_price is None else None
+        consensus_future = pool.submit(fetch_wall_street_consensus, symbol)
+        
         submissions, facts = submission_future.result(), facts_future.result()
         if manual_price is not None:
             p_val = round(float(manual_price), 2)
             market_quote = {"status": "manual", "price": p_val, "currency": "USD", "as_of": utc_now(), "provider": "Manual del usuario", "is_manual": True, "note": "Precio de referencia manual ingresado por el usuario."}
         else:
             market_quote = quote_future.result()
+        wall_street_consensus = consensus_future.result()
     if not isinstance(submissions, dict) or not isinstance(facts, dict):
         raise ProviderUnavailable("La SEC devolvió una respuesta que no se pudo interpretar.")
-    result = build_financials(symbol, cik, facts, submissions, quote=market_quote)
+    result = build_financials(symbol, cik, facts, submissions, quote=market_quote, consensus=wall_street_consensus)
     result["quote"] = market_quote
+    result["wall_street_consensus"] = wall_street_consensus
     return result

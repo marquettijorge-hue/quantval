@@ -178,6 +178,11 @@
           </div>
           
           <!-- Action Buttons -->
+          <button onclick="copyAiPrompt()" id="btnCopyPrompt" title="Copiar Prompt de IA pre-cargado para ChatGPT / Claude" class="h-14 px-3.5 bg-gradient-to-r from-purple-950/80 to-cyan-950/80 hover:from-purple-900 hover:to-cyan-900 text-cyan-300 hover:text-white border border-cyan-500/40 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
+            <svg class="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-cyan-300 group-hover:text-white">Prompt IA</span>
+          </button>
+
           <button onclick="copyExecutiveSummary()" id="btnCopyReport" title="Copiar Resumen Ejecutivo" class="h-14 px-3.5 bg-dark-800 hover:bg-dark-700 text-gray-300 hover:text-white border border-dark-700 rounded-xl transition-all flex flex-col items-center justify-center gap-1 shadow-md group">
             <svg class="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
             <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-cyan-300">Copiar</span>
@@ -195,8 +200,8 @@
         </div>
       </div>
 
-      <!-- Key Metrics Row (5 Cards) -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3.5 pt-5">
+      <!-- Key Metrics Row (6 Cards) -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 pt-5">
         
         <!-- Card 1: Market Price with Resilience Controls -->
         <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
@@ -214,7 +219,20 @@
           </div>
         </div>
 
-        <!-- Card 2: Weighted Fair Value -->
+        <!-- Card 2: Wall Street Analyst Consensus Target -->
+        <div class="bg-dark-800/70 rounded-xl p-3.5 border border-amber-500/30 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs text-amber-400 font-bold">Consenso Wall Street</span>
+              <span id="wsRecomBadge" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60">Analistas</span>
+            </div>
+            <div id="wsTargetPrice" class="text-2xl font-black text-amber-300">-</div>
+            <div id="wsTargetNote" class="text-[10px] text-gray-400 mt-0.5">Target promedio</div>
+          </div>
+          <div id="wsBottomNote" class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">Compilación externa</div>
+        </div>
+
+        <!-- Card 3: Weighted Fair Value -->
         <div class="bg-dark-800/70 rounded-xl p-3.5 border border-cyan-500/40 flex flex-col justify-between">
           <div>
             <div class="text-xs text-cyan-400 font-bold mb-0.5">Fair Value Ponderado E[V]</div>
@@ -224,17 +242,17 @@
           <div class="text-[10px] text-cyan-300/80 font-mono pt-2 border-t border-dark-700/50">Valor intrínseco esperado</div>
         </div>
 
-        <!-- Card 3: Margin of Safety (MoS) -->
+        <!-- Card 4: Margin of Safety (MoS) -->
         <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
           <div>
             <div class="text-xs text-gray-300 font-bold mb-0.5">Margen de Seguridad (MoS)</div>
             <div id="mosValue" class="text-2xl font-black text-white">-</div>
-            <div class="text-[10px] text-gray-400 mt-0.5">Fórmula: (E[V] - Precio) / E[V]</div>
+            <div id="mosFormula" class="text-[10px] text-gray-400 mt-0.5">Fórmula: (E[V] - Precio) / E[V]</div>
           </div>
-          <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">Descuento respecto a Fair Value</div>
+          <div id="mosNote" class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">Descuento respecto a Fair Value</div>
         </div>
 
-        <!-- Card 4: Delta vs Current Price -->
+        <!-- Card 5: Delta vs Current Price -->
         <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
           <div>
             <div class="text-xs text-gray-300 font-bold mb-0.5">Diferencia s/ Cotización (Δ)</div>
@@ -244,7 +262,7 @@
           <div class="text-[10px] text-gray-400 pt-2 border-t border-dark-700/50">Potencial de apreciación sobre precio</div>
         </div>
 
-        <!-- Card 5: Base del modelo -->
+        <!-- Card 6: Base del modelo -->
         <div class="bg-dark-800/70 rounded-xl p-3.5 border border-dark-700/60 flex flex-col justify-between">
           <div>
             <div class="text-xs text-gray-400 mb-0.5">Escenario Base del modelo</div>
@@ -277,7 +295,10 @@
           <span class="text-[10px] font-extrabold uppercase tracking-widest text-cyan-400 block mb-1">REVERSE DCF • EXPECTATIVA IMPLÍCITA</span>
           <h3 class="text-base sm:text-lg font-black text-white">¿Qué Crecimiento Descuenta la Cotización Actual?</h3>
         </div>
-        <span class="text-[10px] px-2.5 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-semibold self-start sm:self-auto">Modelo Inverso Transparente</span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span id="dcfExigencyBadge" class="text-[11px] font-bold px-3 py-1 rounded-full bg-dark-900 border border-dark-700">Semáforo de Exigencia</span>
+          <span class="text-[10px] px-2.5 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-semibold">Modelo Inverso</span>
+        </div>
       </div>
 
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pt-2">
@@ -288,8 +309,16 @@
           </p>
           <p id="reverseDcfParams" class="text-[11px] text-gray-400 font-mono">-</p>
         </div>
-        <div class="bg-dark-900/80 p-3.5 rounded-xl border border-dark-700/60 text-[11px] text-gray-400 max-w-sm">
-          💡 <strong>Expectativa implícita del modelo:</strong> Resuelve numéricamente qué crecimiento anual de FCF necesita el negocio para justificar el precio actual. No constituye consenso ni pronóstico de analistas.
+        <div class="bg-dark-900/90 p-4 rounded-xl border border-dark-700/70 text-xs text-gray-300 max-w-md shadow-inner space-y-2">
+          <div>
+            💡 <strong>Expectativa implícita:</strong> Resuelve qué crecimiento anual de FCF necesita el negocio para justificar el precio actual. No constituye pronóstico ni recomendación.
+          </div>
+          <div class="pt-2 border-t border-dark-800 text-[11px] flex items-center justify-between gap-2">
+            <span class="text-gray-400">¿Querés auditar esta expectativa con IA?</span>
+            <button onclick="copyAiPrompt()" class="text-purple-300 hover:text-white font-bold bg-purple-950/80 hover:bg-purple-900 px-2 py-1 rounded border border-purple-700/60 transition-colors flex items-center gap-1">
+              <span>🤖 Copiar Prompt IA</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -857,6 +886,6 @@
   </footer>
 
   <!-- Application Logic -->
-  <script src="/static/app.js?v=2.6.1"></script>
+  <script src="/static/app.js?v=2.7.0"></script>
 </body>
 </html>

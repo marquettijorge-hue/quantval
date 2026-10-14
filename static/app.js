@@ -249,12 +249,43 @@ function renderDashboard(d) {
     if (mosVal !== null && mosVal !== undefined && mosVal >= 10) {
       vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-emerald-950/40 border border-emerald-800/40";
       if (verdictTextEl) verdictTextEl.className = "text-sm sm:text-base font-extrabold text-emerald-400";
-    } else if (mosVal !== null && mosVal !== undefined && mosVal >= -10) {
+    } else if (deltaVal !== null && deltaVal !== undefined && Math.abs(deltaVal) <= 10) {
       vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-amber-950/40 border border-amber-800/40";
       if (verdictTextEl) verdictTextEl.className = "text-sm sm:text-base font-extrabold text-amber-400";
     } else {
       vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-rose-950/40 border border-rose-800/40";
       if (verdictTextEl) verdictTextEl.className = "text-sm sm:text-base font-extrabold text-rose-400";
+    }
+  }
+
+  // Wall Street Consensus Target Card
+  const ws = d.wall_street_consensus || {};
+  const wsTargetEl = document.getElementById("wsTargetPrice");
+  const wsRecomBadgeEl = document.getElementById("wsRecomBadge");
+  const wsTargetNoteEl = document.getElementById("wsTargetNote");
+  const wsBottomNoteEl = document.getElementById("wsBottomNote");
+
+  if (wsTargetEl) {
+    if (ws.target_price) {
+      wsTargetEl.innerText = `$${ws.target_price.toFixed(2)}`;
+      const upside = priceVal ? ((ws.target_price - priceVal) / priceVal * 100) : null;
+      if (wsTargetNoteEl) {
+        wsTargetNoteEl.innerText = upside !== null ? `${upside >= 0 ? '+' : ''}${upside.toFixed(1)}% vs mercado` : "Target promedio";
+      }
+    } else {
+      wsTargetEl.innerText = "N/D";
+      if (wsTargetNoteEl) wsTargetNoteEl.innerText = "Estimación no disp.";
+    }
+    if (wsRecomBadgeEl) {
+      wsRecomBadgeEl.innerText = ws.recommendation_label || "Analistas";
+      if (ws.recommendation_score && ws.recommendation_score <= 1.8) {
+        wsRecomBadgeEl.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+      } else {
+        wsRecomBadgeEl.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60";
+      }
+    }
+    if (wsBottomNoteEl) {
+      wsBottomNoteEl.innerText = ws.forward_pe ? `P/E Fwd: ${ws.forward_pe.toFixed(1)}x` : (ws.source || "Consenso de analistas");
     }
   }
 
@@ -265,12 +296,26 @@ function renderDashboard(d) {
     fairValueEl.innerText = fairVal > 0 ? `$${fairVal.toFixed(2)}` : "No disponible";
   }
 
-  // Margen de Seguridad (MoS) Card: (E[V] - P) / E[V]
+  // Margen de Seguridad (MoS) Card: (E[V] - P) / E[V] strictly non-negative
   const mosValueEl = document.getElementById("mosValue");
+  const mosFormulaEl = document.getElementById("mosFormula");
+  const mosNoteEl = document.getElementById("mosNote");
+
   if (mosValueEl) {
-    if (mosVal !== null && mosVal !== undefined) {
-      mosValueEl.innerText = `${mosVal > 0 ? '+' : ''}${mosVal.toFixed(2)}%`;
-      mosValueEl.className = `text-xl font-black ${mosVal >= 10 ? 'text-emerald-400' : (mosVal >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    if (fairVal && priceVal) {
+      if (fairVal >= priceVal) {
+        const mosCalc = ((fairVal - priceVal) / fairVal) * 100;
+        mosValueEl.innerText = `+${mosCalc.toFixed(2)}%`;
+        mosValueEl.className = "text-xl font-black text-emerald-400";
+        if (mosFormulaEl) mosFormulaEl.innerText = "Fórmula: (E[V] - P) / E[V]";
+        if (mosNoteEl) mosNoteEl.innerText = "Descuento respecto a Fair Value";
+      } else {
+        const premiumCalc = ((priceVal - fairVal) / fairVal) * 100;
+        mosValueEl.innerText = "0.00%";
+        mosValueEl.className = "text-xl font-black text-gray-400";
+        if (mosFormulaEl) mosFormulaEl.innerText = "Sin margen de seguridad";
+        if (mosNoteEl) mosNoteEl.innerText = `Prima de mercado: +${premiumCalc.toFixed(1)}%`;
+      }
     } else {
       mosValueEl.innerText = "N/D";
     }
@@ -278,11 +323,12 @@ function renderDashboard(d) {
 
   // Diferencia sobre Cotización (Delta) Card: (E[V] - P) / P
   const deltaValueEl = document.getElementById("deltaValue");
-  const deltaVal = v.delta_vs_price_pct !== undefined ? v.delta_vs_price_pct : (priceVal && fairVal ? ((fairVal - priceVal) / priceVal) * 100 : null);
+  let deltaCalc = v.delta_vs_price_pct !== undefined ? v.delta_vs_price_pct : (priceVal && fairVal ? ((fairVal - priceVal) / priceVal) * 100 : null);
   if (deltaValueEl) {
-    if (deltaVal !== null && deltaVal !== undefined) {
-      deltaValueEl.innerText = `${deltaVal > 0 ? '+' : ''}${deltaVal.toFixed(2)}%`;
-      deltaValueEl.className = `text-xl font-black ${deltaVal >= 10 ? 'text-emerald-400' : (deltaVal >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    if (deltaCalc !== null && deltaCalc !== undefined) {
+      deltaCalc = Math.max(-100.0, deltaCalc); // Mathematical floor at -100%
+      deltaValueEl.innerText = `${deltaCalc > 0 ? '+' : ''}${deltaCalc.toFixed(2)}%`;
+      deltaValueEl.className = `text-xl font-black ${deltaCalc >= 10 ? 'text-emerald-400' : (deltaCalc >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
     } else {
       deltaValueEl.innerText = "N/D";
     }
@@ -313,6 +359,7 @@ function renderReverseDcf(d) {
   const revGrowthEl = document.getElementById("reverseDcfGrowth");
   const revTextEl = document.getElementById("reverseDcfText");
   const revParamsEl = document.getElementById("reverseDcfParams");
+  const exigencyBadge = document.getElementById("dcfExigencyBadge");
 
   if (!revGrowthEl) return;
 
@@ -328,6 +375,19 @@ function renderReverseDcf(d) {
     if (revParamsEl) {
       revParamsEl.innerText = `Supuestos aplicados: WACC ${(rev.wacc_assumed_pct || 10).toFixed(1)}% • Tasa Terminal Perpetua g ${(rev.terminal_g_pct || rev.terminal_g_assumed_pct || 2.5).toFixed(1)}%`;
     }
+
+    if (exigencyBadge) {
+      if (gPct <= 10.0) {
+        exigencyBadge.innerText = "🟢 Exigencia Conservadora (<10%)";
+        exigencyBadge.className = "text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/60";
+      } else if (gPct <= 22.0) {
+        exigencyBadge.innerText = "🟡 Exigencia Moderada (10% - 22%)";
+        exigencyBadge.className = "text-[11px] font-bold px-3 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-800/60";
+      } else {
+        exigencyBadge.innerText = "🔴 Exigencia Muy Alta (>22%)";
+        exigencyBadge.className = "text-[11px] font-bold px-3 py-1 rounded-full bg-rose-950 text-rose-300 border border-rose-800/60";
+      }
+    }
   } else {
     revGrowthEl.innerText = "No pudo resolverse";
     revGrowthEl.className = "text-xl font-bold text-gray-400 mb-2";
@@ -336,6 +396,10 @@ function renderReverseDcf(d) {
     }
     if (revParamsEl) {
       revParamsEl.innerText = "Requiere flujo de caja operativo normalizado.";
+    }
+    if (exigencyBadge) {
+      exigencyBadge.innerText = "⚪ Sin Expectativa Resuelta";
+      exigencyBadge.className = "text-[11px] font-bold px-3 py-1 rounded-full bg-dark-900 text-gray-400 border border-dark-700";
     }
   }
 }
@@ -464,17 +528,30 @@ function onScenarioWeightChange() {
 
   const p = currentData.quote?.price || currentData.valuation_summary?.current_price;
   if (p && p > 0) {
-    const newMoS = ((roundedEV - p) / roundedEV) * 100;
-    const newDelta = ((roundedEV - p) / p) * 100;
-
     const mosEl = document.getElementById("mosValue");
-    if (mosEl) {
-      mosEl.innerText = `${newMoS > 0 ? '+' : ''}${newMoS.toFixed(2)}%`;
-      mosEl.className = `text-xl font-black ${newMoS >= 10 ? 'text-emerald-400' : (newMoS >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
+    const mosFormulaEl = document.getElementById("mosFormula");
+    const mosNoteEl = document.getElementById("mosNote");
+    if (roundedEV >= p) {
+      const newMoS = ((roundedEV - p) / roundedEV) * 100;
+      if (mosEl) {
+        mosEl.innerText = `+${newMoS.toFixed(2)}%`;
+        mosEl.className = "text-xl font-black text-emerald-400";
+      }
+      if (mosFormulaEl) mosFormulaEl.innerText = "Fórmula: (E[V] - P) / E[V]";
+      if (mosNoteEl) mosNoteEl.innerText = "Descuento respecto a Fair Value";
+    } else {
+      const newPrem = ((p - roundedEV) / roundedEV) * 100;
+      if (mosEl) {
+        mosEl.innerText = "0.00%";
+        mosEl.className = "text-xl font-black text-gray-400";
+      }
+      if (mosFormulaEl) mosFormulaEl.innerText = "Sin margen de seguridad";
+      if (mosNoteEl) mosNoteEl.innerText = `Prima de mercado: +${newPrem.toFixed(1)}%`;
     }
 
     const deltaEl = document.getElementById("deltaValue");
     if (deltaEl) {
+      const newDelta = Math.max(-100.0, ((roundedEV - p) / p) * 100);
       deltaEl.innerText = `${newDelta > 0 ? '+' : ''}${newDelta.toFixed(2)}%`;
       deltaEl.className = `text-xl font-black ${newDelta >= 10 ? 'text-emerald-400' : (newDelta >= -10 ? 'text-amber-400' : 'text-rose-400')}`;
     }
@@ -630,8 +707,9 @@ function recalculateSensitivity() {
   }
 
   const currP = currentData.quote?.price || currentData.valuation_summary?.current_price || 0;
-  const simMoS = currP > 0 ? ((simFV - currP) / simFV) * 100 : 0;
-  const simDelta = currP > 0 ? ((simFV - currP) / currP) * 100 : 0;
+  const simMoS = (currP > 0 && simFV >= currP) ? ((simFV - currP) / simFV) * 100 : 0;
+  const simPremium = (currP > 0 && currP > simFV && simFV > 0) ? ((currP - simFV) / simFV) * 100 : 0;
+  const simDelta = currP > 0 ? Math.max(-100.0, ((simFV - currP) / currP) * 100) : 0;
 
   const simFvEl = document.getElementById("simFairValue");
   if (simFvEl) simFvEl.innerText = `$${simFV.toFixed(2)}`;
@@ -649,13 +727,13 @@ function recalculateSensitivity() {
   if (badge) {
     if (simMoS >= 15) {
       badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-emerald-950 text-emerald-300 border border-emerald-800/60";
-      badge.innerText = `Subvaluada (+${simMoS.toFixed(1)}% MoS)`;
-    } else if (simMoS >= -10) {
+      badge.innerText = `Subvaluada (+${simMoS.toFixed(1)}% Margen)`;
+    } else if (Math.abs(simDelta) <= 10) {
       badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-amber-950 text-amber-300 border border-amber-800/60";
-      badge.innerText = `En Fair Value (${simMoS >= 0 ? '+' : ''}${simMoS.toFixed(1)}% MoS)`;
+      badge.innerText = `En Fair Value (${simDelta >= 0 ? '+' : ''}${simDelta.toFixed(1)}% vs precio)`;
     } else {
       badge.className = "inline-block text-xs font-extrabold px-3 py-1 rounded-full mb-3 bg-rose-950 text-rose-300 border border-rose-800/60";
-      badge.innerText = `Sobrevaluada (${simMoS.toFixed(1)}% MoS)`;
+      badge.innerText = `Sobrevalorada (Prima: +${simPremium.toFixed(1)}%)`;
     }
   }
 
@@ -909,8 +987,17 @@ function renderDuelDashboard(dA, dB) {
   const dmA = document.getElementById("duelMosA");
   if (dmA) {
     const mosA = vA.margin_of_safety_pct;
-    dmA.innerText = mosA !== null && mosA !== undefined ? `${mosA > 0 ? '+' : ''}${mosA.toFixed(2)}%` : "N/D";
-    dmA.className = mosA >= 10 ? "font-extrabold text-emerald-400" : (mosA >= -10 ? "font-extrabold text-amber-400" : "font-extrabold text-rose-400");
+    const premA = vA.premium_pct !== undefined ? vA.premium_pct : ((vA.current_price > vA.composite_fair_value && vA.composite_fair_value > 0) ? ((vA.current_price - vA.composite_fair_value) / vA.composite_fair_value) * 100 : 0);
+    if (mosA !== null && mosA !== undefined && mosA > 0) {
+      dmA.innerText = `+${mosA.toFixed(1)}% MoS`;
+      dmA.className = "font-extrabold text-emerald-400";
+    } else if (premA > 0) {
+      dmA.innerText = `Prima +${premA.toFixed(1)}%`;
+      dmA.className = "font-extrabold text-rose-400";
+    } else {
+      dmA.innerText = mosA !== null && mosA !== undefined ? `${mosA.toFixed(1)}%` : "N/D";
+      dmA.className = "font-extrabold text-gray-400";
+    }
   }
 
   // Ticker B Head
@@ -927,8 +1014,17 @@ function renderDuelDashboard(dA, dB) {
   const dmB = document.getElementById("duelMosB");
   if (dmB) {
     const mosB = vB.margin_of_safety_pct;
-    dmB.innerText = mosB !== null && mosB !== undefined ? `${mosB > 0 ? '+' : ''}${mosB.toFixed(2)}%` : "N/D";
-    dmB.className = mosB >= 10 ? "font-extrabold text-emerald-400" : (mosB >= -10 ? "font-extrabold text-amber-400" : "font-extrabold text-rose-400");
+    const premB = vB.premium_pct !== undefined ? vB.premium_pct : ((vB.current_price > vB.composite_fair_value && vB.composite_fair_value > 0) ? ((vB.current_price - vB.composite_fair_value) / vB.composite_fair_value) * 100 : 0);
+    if (mosB !== null && mosB !== undefined && mosB > 0) {
+      dmB.innerText = `+${mosB.toFixed(1)}% MoS`;
+      dmB.className = "font-extrabold text-emerald-400";
+    } else if (premB > 0) {
+      dmB.innerText = `Prima +${premB.toFixed(1)}%`;
+      dmB.className = "font-extrabold text-rose-400";
+    } else {
+      dmB.innerText = mosB !== null && mosB !== undefined ? `${mosB.toFixed(1)}%` : "N/D";
+      dmB.className = "font-extrabold text-gray-400";
+    }
   }
 
   // 5-Year CAGR Cara a Cara
@@ -982,11 +1078,16 @@ function renderDuelTable(dA, dB) {
 
   const rows = [
     {
-      name: "Margen de Seguridad (MoS)",
-      desc: "Descuento del precio vs Valor Intrínseco E[V]",
-      valA: vA.margin_of_safety_pct,
-      valB: vB.margin_of_safety_pct,
-      fmt: v => v !== null && v !== undefined ? `${v > 0 ? '+' : ''}${v.toFixed(2)}%` : "N/D",
+      name: "Margen de Seguridad / Prima",
+      desc: "Descuento del precio vs E[V] o prima pagada",
+      valA: (vA.margin_of_safety_pct > 0) ? vA.margin_of_safety_pct : (vA.premium_pct ? -vA.premium_pct : 0),
+      valB: (vB.margin_of_safety_pct > 0) ? vB.margin_of_safety_pct : (vB.premium_pct ? -vB.premium_pct : 0),
+      fmt: v => {
+        if (v === null || v === undefined) return "N/D";
+        if (v > 0) return `+${v.toFixed(1)}% MoS`;
+        if (v < 0) return `Prima +${Math.abs(v).toFixed(1)}%`;
+        return `0.0%`;
+      },
       cmp: (a, b) => (a === null || b === null) ? "TIE" : (a > b ? "A" : (b > a ? "B" : "TIE"))
     },
     {
@@ -1063,14 +1164,64 @@ function renderDuelTable(dA, dB) {
 }
 
 // -------------------------------------------------------------
-// Copy Reports & Share Link
+// Copy Reports, AI Prompt & Share Link
 // -------------------------------------------------------------
+function copyAiPrompt() {
+  if (!currentData) return;
+  const d = currentData;
+  const v = d.valuation_summary || {};
+  const sc = d.probabilistic_scenarios || d.valuation?.scenarios || {};
+  const rev = d.reverse_dcf || d.valuation?.reverse_dcf || {};
+  const ws = d.wall_street_consensus || {};
+  const sym = d.symbol || d.ticker;
+  const name = d.company_name || d.name || sym;
+  const p = v.current_price || currentData.quote?.price || 0;
+  const fv = v.composite_fair_value || 0;
+
+  const promptLines = [
+    `Actúa como un Analista Senior de Equity Research y Auditor Financiero Institucional.`,
+    `Realiza un análisis crítico y de debida diligencia sobre la acción de **${name} (${sym})** a partir de los datos fundamentales auditados de sus balances SEC y las expectativas implícitas del mercado:`,
+    ``,
+    `### 1. DATOS DE MERCADO Y VALUACIÓN CUANTITATIVA (QuantVal)`,
+    `- **Precio de Mercado:** US$ ${p.toFixed(2)}`,
+    `- **Fair Value Ponderado E[V]:** US$ ${fv.toFixed(2)} (Pesimista: US$ ${sc.bear?.fair_value?.toFixed(2) || 'N/D'} | Base: US$ ${sc.base?.fair_value?.toFixed(2) || 'N/D'} | Optimista: US$ ${sc.bull?.fair_value?.toFixed(2) || 'N/D'})`,
+    `- **Margen de Seguridad (MoS):** ${v.margin_of_safety_pct > 0 ? '+' + v.margin_of_safety_pct.toFixed(2) + '%' : '0.00% (Sin descuento)'}`,
+    v.premium_pct > 0 ? `- **Prima de Mercado:** +${v.premium_pct.toFixed(1)}% sobre valor intrínseco` : null,
+    `- **Diferencia vs Cotización (Δ):** ${v.delta_vs_price_pct !== null && v.delta_vs_price_pct !== undefined ? (v.delta_vs_price_pct > 0 ? '+' : '') + v.delta_vs_price_pct.toFixed(2) + '%' : 'N/D'}`,
+    ``,
+    `### 2. CONSENSO DE WALL STREET`,
+    `- **Precio Objetivo Promedio de Analistas:** ${ws.target_price ? 'US$ ' + ws.target_price.toFixed(2) : 'N/D'}`,
+    `- **Recomendación:** ${ws.recommendation_key || ws.rating || 'N/D'} (${ws.recommendation_mean ? ws.recommendation_mean.toFixed(2) + ' / 5.0' : 'N/D'})`,
+    `- **P/E Forward Consenso:** ${ws.forward_pe ? ws.forward_pe.toFixed(1) + 'x' : 'N/D'}`,
+    ``,
+    `### 3. EXPECTATIVAS IMPLÍCITAS (Reverse DCF)`,
+    `- **Crecimiento anual de FCF exigido por la cotización (5 años):** ${rev.solved ? rev.implied_fcf_growth_5y_pct?.toFixed(1) + '% anual' : 'No resuelto'}`,
+    `- **WACC asumido:** ${(rev.wacc_assumed_pct || 10).toFixed(1)}% | **Tasa Terminal perpetua (g):** ${(rev.terminal_g_assumed_pct || 2.5).toFixed(1)}%`,
+    ``,
+    `### 4. INDICADORES FUNDAMENTALES AUDITADOS (SEC EDGAR 10-K)`,
+    ...(d.core_indicators || []).map(ci => `- **${ci.name}:** ${ci.formatted} *(${ci.description || ''})*`),
+    ``,
+    `### TU TAREA COMO ANALISTA:`,
+    `1. Evalúa si la tasa de crecimiento exigida por el mercado (${rev.solved ? rev.implied_fcf_growth_5y_pct?.toFixed(1) + '%' : 'N/D'}) es alcanzable considerando el Moat competitivo de la empresa, el crecimiento de su industria y el entorno macroeconómico.`,
+    `2. Compara la valuación intrínseca por flujos de caja con el target de Wall Street (${ws.target_price ? 'US$ ' + ws.target_price.toFixed(2) : 'N/D'}) y explica por qué puede existir una discrepancia.`,
+    `3. Identifica los 3 principales riesgos operativos, regulatorios o de valuación para un inversor a 5 años.`,
+    `4. Emite un veredicto estructurado: [Infravalorada con MoS / Precio Justo / Sobrevalorada con Prima Excesiva], justificando tu tesis con los números anteriores.`
+  ].filter(line => line !== null);
+
+  navigator.clipboard.writeText(promptLines.join("\n")).then(() => {
+    showToast("¡Prompt de IA copiado! Pegalo en ChatGPT o Claude");
+  }).catch(() => {
+    showToast("Error al copiar al portapapeles", true);
+  });
+}
+
 function copyExecutiveSummary() {
   if (!currentData) return;
   const d = currentData;
   const v = d.valuation_summary || {};
   const sc = d.probabilistic_scenarios || d.valuation?.scenarios || {};
   const rev = d.reverse_dcf || d.valuation?.reverse_dcf || {};
+  const ws = d.wall_street_consensus || {};
 
   const md = [
     `# QuantVal Resumen Ejecutivo: ${d.company_name || d.name} (${d.symbol || d.ticker})`,
@@ -1080,8 +1231,10 @@ function copyExecutiveSummary() {
     `### Veredicto Cuantitativo: ${v.verdict || 'Análisis Completado'}`,
     `- **Precio Actual:** $${(v.current_price || 0).toFixed(2)} USD`,
     `- **Fair Value Ponderado E[V]:** $${(v.composite_fair_value || 0).toFixed(2)} USD`,
-    `- **Margen de Seguridad (MoS):** ${v.margin_of_safety_pct !== null && v.margin_of_safety_pct !== undefined ? (v.margin_of_safety_pct > 0 ? '+' : '') + v.margin_of_safety_pct.toFixed(2) + '%' : 'N/D'}`,
+    `- **Margen de Seguridad (MoS):** ${v.margin_of_safety_pct > 0 ? '+' + v.margin_of_safety_pct.toFixed(2) + '%' : '0.00% (Sin descuento)'}`,
+    v.premium_pct > 0 ? `- **Prima de Mercado:** +${v.premium_pct.toFixed(1)}% sobre valor intrínseco` : null,
     `- **Diferencia s/ Cotización (Δ):** ${v.delta_vs_price_pct !== null && v.delta_vs_price_pct !== undefined ? (v.delta_vs_price_pct > 0 ? '+' : '') + v.delta_vs_price_pct.toFixed(2) + '%' : 'N/D'}`,
+    `- **Consenso de Wall Street:** ${ws.target_price ? 'Target Promedio $' + ws.target_price.toFixed(2) + ' (' + (ws.recommendation_key || 'Rating') + ')' : 'N/D'}`,
     ``,
     `### ¿Qué Descuenta el Precio Actual? (Reverse DCF)`,
     `- **Crecimiento Exigido de FCF:** ${rev.solved ? rev.implied_fcf_growth_5y_pct?.toFixed(1) + '% anual a 5 años' : 'No resuelto'}`,
@@ -1098,7 +1251,7 @@ function copyExecutiveSummary() {
     ``,
     `> 📌 **Aviso Educativo:** Información basada en balances oficiales SEC. No constituye asesoramiento financiero ni recomendación de compra o venta.`,
     `> 🎓 **Taller de Inversiones con IA:** Comunidad de @accionesargentinas (Jorge Marquetti). Enlace: https://www.educaenlinea.com.ar/web/talleria.html`
-  ].join("\n");
+  ].filter(line => line !== null).join("\n");
 
   navigator.clipboard.writeText(md).then(() => {
     showToast("¡Resumen ejecutivo copiado al portapapeles!");
@@ -1237,21 +1390,23 @@ function downloadCardPng() {
   ctx.font = "12px system-ui, sans-serif";
   ctx.fillText("25% Bear + 50% Base + 25% Bull", 460, 375);
 
-  // Metrics Box 3: Margin of Safety
+  // Metrics Box 3: Margin of Safety / Premium
+  const hasMoS = (mos !== null && mos > 0);
+  const prem = v.premium_pct !== undefined ? v.premium_pct : ((p > fv && fv > 0) ? ((p - fv) / fv) * 100 : 0);
   ctx.fillStyle = "rgba(17, 24, 39, 0.85)";
   ctx.fillRect(820, 250, 320, 150);
-  ctx.strokeStyle = mos !== null && mos >= 0 ? "rgba(16, 185, 129, 0.6)" : "rgba(244, 63, 94, 0.6)";
+  ctx.strokeStyle = hasMoS ? "rgba(16, 185, 129, 0.6)" : "rgba(244, 63, 94, 0.6)";
   ctx.strokeRect(820, 250, 320, 150);
 
   ctx.fillStyle = "#94A3B8";
   ctx.font = "14px system-ui, sans-serif";
-  ctx.fillText("MARGEN DE SEGURIDAD (MoS)", 840, 285);
-  ctx.fillStyle = mos !== null && mos >= 0 ? "#34D399" : "#FB7185";
+  ctx.fillText(hasMoS ? "MARGEN DE SEGURIDAD (MoS)" : "PRIMA DE MERCADO", 840, 285);
+  ctx.fillStyle = hasMoS ? "#34D399" : "#FB7185";
   ctx.font = "900 42px monospace";
-  ctx.fillText(mos !== null ? `${mos > 0 ? '+' : ''}${mos.toFixed(1)}%` : "N/D", 840, 345);
+  ctx.fillText(hasMoS ? `+${mos.toFixed(1)}%` : `+${prem.toFixed(1)}%`, 840, 345);
   ctx.fillStyle = "#94A3B8";
   ctx.font = "12px system-ui, sans-serif";
-  ctx.fillText(delta !== null ? `Δ s/ Cotización: ${delta > 0 ? '+' : ''}${delta.toFixed(1)}%` : "Fórmula: (E[V] - P) / E[V]", 840, 375);
+  ctx.fillText(hasMoS ? "Descuento vs Valor Intrínseco" : "Cotiza sobre Valor Intrínseco", 840, 375);
 
   // Bottom Box: Reverse DCF & Call to Action
   ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
