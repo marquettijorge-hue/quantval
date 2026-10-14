@@ -245,6 +245,7 @@ function renderDashboard(d) {
 
   const vBox = document.getElementById("verdictBox");
   const mosVal = v.margin_of_safety_pct;
+  const deltaVal = v.delta_vs_price_pct;
   if (vBox) {
     if (mosVal !== null && mosVal !== undefined && mosVal >= 10) {
       vBox.className = "p-3.5 px-5 rounded-xl flex items-center gap-4 bg-emerald-950/40 border border-emerald-800/40";
