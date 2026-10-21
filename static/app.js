@@ -271,7 +271,13 @@ function renderDashboard(d) {
       wsTargetEl.innerText = `$${ws.target_price.toFixed(2)}`;
       const upside = priceVal ? ((ws.target_price - priceVal) / priceVal * 100) : null;
       if (wsTargetNoteEl) {
-        wsTargetNoteEl.innerText = upside !== null ? `${upside >= 0 ? '+' : ''}${upside.toFixed(1)}% vs mercado` : "Target promedio";
+        if (ws.target_low && ws.target_high) {
+          wsTargetNoteEl.innerText = `Rango $${ws.target_low.toFixed(0)} - $${ws.target_high.toFixed(0)}${upside !== null ? ` (${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%)` : ''}`;
+        } else if (upside !== null) {
+          wsTargetNoteEl.innerText = `${upside >= 0 ? '+' : ''}${upside.toFixed(1)}% vs mercado`;
+        } else {
+          wsTargetNoteEl.innerText = "Target promedio";
+        }
       }
     } else {
       wsTargetEl.innerText = "N/D";
@@ -286,7 +292,10 @@ function renderDashboard(d) {
       }
     }
     if (wsBottomNoteEl) {
-      wsBottomNoteEl.innerText = ws.forward_pe ? `P/E Fwd: ${ws.forward_pe.toFixed(1)}x` : (ws.source || "Consenso de analistas");
+      const parts = [];
+      if (ws.pe_trailing) parts.push(`P/E: ${ws.pe_trailing.toFixed(1)}x`);
+      if (ws.forward_pe) parts.push(`Fwd: ${ws.forward_pe.toFixed(1)}x`);
+      wsBottomNoteEl.innerText = parts.length > 0 ? parts.join(" • ") : (ws.source || "Consenso institucional");
     }
   }
 
@@ -420,7 +429,9 @@ function renderCoreIndicators(indicators) {
     card.className = "bg-dark-800/80 rounded-xl p-4 border border-dark-700/70 flex flex-col justify-between shadow-md";
 
     let statusBadge = ci.status === "available"
-      ? `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/50">SEC Auditado</span>`
+      ? (ci.source && ci.source.includes("Mercado") 
+          ? `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-800/50">Mercado TTM</span>`
+          : `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/50">SEC Auditado</span>`)
       : (ci.status === "not_applicable"
         ? `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-dark-700 text-gray-400 border border-dark-600">No Aplicable</span>`
         : `<span class="text-[9px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-800/50">N/D</span>`);
@@ -1191,9 +1202,9 @@ function copyAiPrompt() {
     `- **Diferencia vs Cotización (Δ):** ${v.delta_vs_price_pct !== null && v.delta_vs_price_pct !== undefined ? (v.delta_vs_price_pct > 0 ? '+' : '') + v.delta_vs_price_pct.toFixed(2) + '%' : 'N/D'}`,
     ``,
     `### 2. CONSENSO DE WALL STREET`,
-    `- **Precio Objetivo Promedio de Analistas:** ${ws.target_price ? 'US$ ' + ws.target_price.toFixed(2) : 'N/D'}`,
-    `- **Recomendación:** ${ws.recommendation_key || ws.rating || 'N/D'} (${ws.recommendation_mean ? ws.recommendation_mean.toFixed(2) + ' / 5.0' : 'N/D'})`,
-    `- **P/E Forward Consenso:** ${ws.forward_pe ? ws.forward_pe.toFixed(1) + 'x' : 'N/D'}`,
+    `- **Precio Objetivo Promedio de Analistas:** ${ws.target_price ? 'US$ ' + ws.target_price.toFixed(2) + (ws.target_low && ws.target_high ? ' (Rango: US$ ' + ws.target_low.toFixed(0) + ' - US$ ' + ws.target_high.toFixed(0) + ')' : '') : 'N/D'}`,
+    `- **Recomendación:** ${ws.recommendation_label || 'Consenso de Mercado'} (${ws.recommendation_score ? ws.recommendation_score.toFixed(2) + ' / 5.0' : 'N/D'})`,
+    `- **Múltiplos de Mercado:** P/E Trailing ${ws.pe_trailing ? ws.pe_trailing.toFixed(1) + 'x' : 'N/D'} | P/E Forward ${ws.forward_pe ? ws.forward_pe.toFixed(1) + 'x' : 'N/D'}`,
     ``,
     `### 3. EXPECTATIVAS IMPLÍCITAS (Reverse DCF)`,
     `- **Crecimiento anual de FCF exigido por la cotización (5 años):** ${rev.solved ? rev.implied_fcf_growth_5y_pct?.toFixed(1) + '% anual' : 'No resuelto'}`,

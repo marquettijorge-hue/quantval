@@ -734,8 +734,22 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
                 available_sources.append(source)
 
     # Balance sheet items for valuation
-    shares_row = choose([r for r in rows.get("shares", []) if r["start_date"] is None], end=end) or choose(annual_rows(rows.get("shares", [])))
+    shares_row = choose([r for r in rows.get("shares", []) if r["start_date"] is None], end=end) or choose([r for r in rows.get("shares", []) if r["start_date"] is None]) or choose(annual_rows(rows.get("shares", [])))
     shares_val = shares_row["val"] if shares_row else None
+
+    # Unscale / normalize shares if reported in millions (e.g. MCD filed 716.4) or if external institutional count is available
+    consensus_shares = consensus.get("shares_outstanding") if isinstance(consensus, dict) else None
+    if consensus_shares and consensus_shares > 1_000_000:
+        if shares_val is None or shares_val < 10_000_000 or abs(shares_val - consensus_shares) / consensus_shares > 0.50:
+            if shares_val and 100 < shares_val < 100_000 and abs((shares_val * 1e6) - consensus_shares) / consensus_shares < 0.20:
+                shares_val = shares_val * 1e6
+            else:
+                shares_val = consensus_shares
+    elif shares_val is not None:
+        if shares_val < 100_000 and (values.get("revenue") or 0) > 100_000_000:
+            shares_val = shares_val * 1e6
+        elif shares_val < 10_000_000 and (values.get("revenue") or 0) > 500_000_000:
+            shares_val = shares_val * 1e3
     
     debt_row = choose([r for r in rows.get("debt", []) if r["start_date"] is None], end=end) or choose([r for r in rows.get("debt", []) if r["start_date"] is None])
     debt_val = debt_row["val"] if debt_row else 0.0
@@ -756,12 +770,21 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
     hist_g = growth if growth is not None else 0.08
     base_growth = round(min(0.35, max(0.04, hist_g * 0.70 if hist_g > 0.20 else hist_g)), 4)
 
+    # Free Cash Flow Normalization:
+    # If customer deposits inflate Operating Cash Flow (e.g. MercadoLibre/MercadoPago digital account float),
+    # genuine sustainable FCF cannot exceed operating earnings (EBIT).
+    t_ebit = values.get("operating_income") or 0.0
+    effective_fcf = fcf
+    if fcf is not None and t_ebit > 0:
+        if fcf > t_ebit * 1.35:
+            effective_fcf = round(t_ebit * 0.85, 2)
+
     # Build Valuation Model
     if financial_sector:
         valuation = build_banking_valuation(values.get("equity"), prior_equity["val"] if prior_equity else None, values.get("net_income"), shares_val or 1.0, current_price=current_price)
-    elif shares_val and shares_val > 0 and fcf is not None and fcf > 0:
+    elif shares_val and shares_val > 0 and effective_fcf is not None and effective_fcf > 0:
         valuation = calculate_probabilistic_scenarios(
-            start_fcf=fcf,
+            start_fcf=effective_fcf,
             shares=shares_val,
             cash=cash_val,
             debt=debt_val,
@@ -776,6 +799,15 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
         }
 
     fair_val = valuation.get("composite_fair_value") or valuation.get("fair_value")
+
+    # Sanity guard: prevent distorted valuation outliers (> 10x of market price)
+    if current_price and current_price > 0 and fair_val and fair_val > 0:
+        if fair_val > current_price * 10.0:
+            capped_fv = round(min(fair_val, current_price * 3.5), 2)
+            valuation["composite_fair_value"] = capped_fv
+            valuation["valuation_note"] = "Valuación acotada por múltiplos sostenibles."
+            fair_val = capped_fv
+
     mos = valuation.get("margin_of_safety_pct")
     delta_vs_price = valuation.get("delta_vs_price_pct")
 
@@ -802,7 +834,14 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
         "premium_pct": premium_pct,
         "price_source": quote.get("provider", "Mercado") if quote else "No disponible",
         "price_date": quote.get("as_of") if quote else None,
-        "is_manual": is_manual
+        "is_manual": is_manual,
+        "target_price": consensus.get("target_price") if consensus else None,
+        "target_high": consensus.get("target_high") if consensus else None,
+        "target_low": consensus.get("target_low") if consensus else None,
+        "recommendation_score": consensus.get("recommendation_score") if consensus else None,
+        "recommendation_label": consensus.get("recommendation_label") if consensus else None,
+        "pe_trailing": consensus.get("pe_trailing") if consensus else None,
+        "forward_pe": consensus.get("forward_pe") if consensus else None
     }
 
     # Evaluate Quality Scorecards & Checklist
@@ -887,11 +926,21 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
         {
             "id": "valuation_multiple",
             "name": "Múltiplo Patrimonial (P/B)" if financial_sector else "Múltiplo de Valuación (P/E)",
-            "value": round(current_price / max(0.01, (t_equity/shares_val)), 2) if financial_sector and current_price and shares_val and t_equity > 0 else (round(current_price / max(0.01, (t_ni/shares_val)), 1) if current_price and shares_val and t_ni > 0 else None),
-            "formatted": (f"P/B: {current_price/(t_equity/shares_val):.2f}x (Justificado: {valuation.get('justified_pb', 1.5):.2f}x)" if financial_sector and current_price and shares_val and t_equity > 0 else (f"P/E Trailing: {current_price/(t_ni/shares_val):.1f}x" if current_price and shares_val and t_ni > 0 else "N/D")),
-            "source": "Mercado / Balances SEC",
-            "period": "Tiempo Real / Cierre",
-            "status": "available" if current_price else "missing",
+            "value": round(current_price / max(0.01, (t_equity/shares_val)), 2) if financial_sector and current_price and shares_val and t_equity > 0 else (
+                consensus.get("pe_trailing") if consensus and consensus.get("pe_trailing") else (
+                    round(current_price / max(0.01, (t_ni/shares_val)), 1) if current_price and shares_val and t_ni > 0 else None
+                )
+            ),
+            "formatted": (
+                f"P/B: {current_price/(t_equity/shares_val):.2f}x (Justificado: {valuation.get('justified_pb', 1.5):.2f}x)" if financial_sector and current_price and shares_val and t_equity > 0 else (
+                    f"P/E Trailing: {consensus.get('pe_trailing'):.1f}x" + (f" (Fwd: {consensus.get('forward_pe'):.1f}x)" if consensus.get('forward_pe') else "") if consensus and consensus.get("pe_trailing") else (
+                        f"P/E Trailing: {current_price/(t_ni/shares_val):.1f}x" if current_price and shares_val and t_ni > 0 else "N/D"
+                    )
+                )
+            ),
+            "source": "Mercado Institucional (TradingView / Wall Street)" if consensus and consensus.get("pe_trailing") else "Mercado / Balances SEC",
+            "period": "Tiempo Real / TTM",
+            "status": "available" if (consensus and consensus.get("pe_trailing")) or current_price else "missing",
             "description": "Múltiplo pagado por dólar de ganancia neta o por valor en libros."
         }
     ]
@@ -981,16 +1030,52 @@ def fetch_quote(symbol):
     return empty
 
 def fetch_wall_street_consensus(symbol):
-    empty = {
+    data = {
         "status": "missing",
         "target_price": None,
+        "target_high": None,
+        "target_low": None,
         "recommendation_score": None,
         "recommendation_label": "No disponible",
+        "pe_trailing": None,
         "forward_pe": None,
+        "shares_outstanding": None,
         "source": "Wall Street Consensus",
         "disclaimer": "Estimaciones públicas compiladas de analistas de Wall Street."
     }
-    # 1. Finviz parser
+    # 1. TradingView Scanner for target price, analyst range, recommendation, P/E trailing, and verified shares
+    try:
+        tv_url = "https://scanner.tradingview.com/america/scan"
+        payload = {
+            "symbols": {"tickers": [f"NASDAQ:{symbol}", f"NYSE:{symbol}", f"AMEX:{symbol}"]},
+            "columns": ["close", "price_target_average", "price_target_high", "price_target_low", "recommendation_mark", "price_earnings_ttm", "total_shares_outstanding_fundamental"]
+        }
+        res = requests.post(tv_url, json=payload, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+        if res.status_code == 200:
+            for row in res.json().get("data", []):
+                d = row.get("d", [])
+                if d and len(d) >= 7:
+                    if d[1] is not None and float(d[1]) > 0:
+                        data["target_price"] = round(float(d[1]), 2)
+                    if d[2] is not None and float(d[2]) > 0:
+                        data["target_high"] = round(float(d[2]), 2)
+                    if d[3] is not None and float(d[3]) > 0:
+                        data["target_low"] = round(float(d[3]), 2)
+                    if d[4] is not None:
+                        rec = round(float(d[4]), 2)
+                        data["recommendation_score"] = rec
+                        data["recommendation_label"] = "Fuerte Compra" if rec <= 1.5 else ("Compra" if rec <= 2.2 else ("Mantener" if rec <= 3.2 else "Consenso de Mercado"))
+                    if d[5] is not None and float(d[5]) > 0:
+                        data["pe_trailing"] = round(float(d[5]), 1)
+                    if d[6] is not None and float(d[6]) > 0:
+                        data["shares_outstanding"] = float(d[6])
+                    data["status"] = "available"
+                    data["source"] = "Wall Street Consensus (TradingView Institutional)"
+                    break
+    except Exception:
+        pass
+
+    # 2. Finviz for Forward P/E & FactSet consensus enrichment
     try:
         url = f"https://finviz.com/quote.ashx?t={symbol}"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}
@@ -999,57 +1084,22 @@ def fetch_wall_street_consensus(symbol):
             target_match = re.search(r'Target Price.*?<span[^>]*>([0-9.]+)</span>', r.text)
             recom_match = re.search(r'>Recom<.*?<span[^>]*>([0-9.]+)</span>', r.text)
             pe_fwd_match = re.search(r'Forward P/E.*?<span[^>]*>([0-9.]+)</span>', r.text)
-            target_val = float(target_match.group(1)) if target_match else None
-            recom_val = float(recom_match.group(1)) if recom_match else None
-            pe_fwd_val = float(pe_fwd_match.group(1)) if pe_fwd_match else None
-            if target_val or recom_val:
-                recom_label = "Fuerte Compra" if recom_val and recom_val <= 1.5 else (
-                    "Compra" if recom_val and recom_val <= 2.2 else (
-                        "Mantener" if recom_val and recom_val <= 3.2 else (
-                            "Bajo Rendimiento" if recom_val else "Consenso de Mercado"
-                        )
-                    )
-                )
-                return {
-                    "status": "available",
-                    "target_price": target_val,
-                    "recommendation_score": recom_val,
-                    "recommendation_label": recom_label,
-                    "forward_pe": pe_fwd_val,
-                    "source": "Wall Street Consensus (Finviz / FactSet)",
-                    "disclaimer": "Compilación de estimaciones de analistas de inversión de Wall Street."
-                }
+            pe_ttm_match = re.search(r'>P/E<.*?<span[^>]*>([0-9.]+)</span>', r.text)
+            if pe_fwd_match:
+                data["forward_pe"] = float(pe_fwd_match.group(1))
+            if not data["target_price"] and target_match:
+                data["target_price"] = float(target_match.group(1))
+            if not data["pe_trailing"] and pe_ttm_match:
+                data["pe_trailing"] = float(pe_ttm_match.group(1))
+            if not data["recommendation_score"] and recom_match:
+                rec = float(recom_match.group(1))
+                data["recommendation_score"] = rec
+                data["recommendation_label"] = "Fuerte Compra" if rec <= 1.5 else ("Compra" if rec <= 2.2 else ("Mantener" if rec <= 3.2 else "Consenso de Mercado"))
+            data["status"] = "available"
     except Exception:
         pass
 
-    # 2. TradingView fallback for institutional mark
-    try:
-        tv_url = "https://scanner.tradingview.com/america/scan"
-        payload = {"symbols": {"tickers": [f"NASDAQ:{symbol}", f"NYSE:{symbol}", f"AMEX:{symbol}"]}, "columns": ["close", "currency", "recommendation_mark"]}
-        res = requests.post(tv_url, json=payload, headers={"User-Agent": "Mozilla/5.0"}, timeout=4)
-        if res.status_code == 200:
-            for row in res.json().get("data", []):
-                d = row.get("d")
-                if d and len(d) >= 3 and d[2] is not None:
-                    rec_val = round(float(d[2]), 2)
-                    recom_label = "Fuerte Compra" if rec_val <= 1.5 else (
-                        "Compra" if rec_val <= 2.2 else (
-                            "Mantener" if rec_val <= 3.2 else "Consenso de Mercado"
-                        )
-                    )
-                    return {
-                        "status": "partial",
-                        "target_price": None,
-                        "recommendation_score": rec_val,
-                        "recommendation_label": recom_label,
-                        "forward_pe": None,
-                        "source": "TradingView Institutional Mark",
-                        "disclaimer": "Puntaje de recomendación de analistas compilado por TradingView."
-                    }
-    except Exception:
-        pass
-
-    return empty
+    return data
 
 def analyze_ticker(ticker_sym, manual_price=None):
     symbol = normalize_ticker(ticker_sym)
