@@ -21,3 +21,9 @@ test('copy includes periods, formulas and provenance without fabricated consensu
  assert.match(text,/15%/);assert.match(text,/Cálculo histórico/);assert.match(text,/2025-12-31/);assert.match(text,/sec.gov/);
  assert.doesNotMatch(text,/Consenso|TIR|0 analistas/);
 });
+test('runDcfSimulation updates dynamically when exit multiple changes',()=>{
+ const fv16 = ctx.runDcfSimulation(7186000000, 710398642, 0, 0, 0.085, 0.04, 16.0, 12.31);
+ const fv24 = ctx.runDcfSimulation(7186000000, 710398642, 0, 0, 0.085, 0.04, 24.0, 12.31);
+ assert.ok(fv24 > fv16);
+ assert.ok(fv24 > 250 && fv16 < 210);
+});

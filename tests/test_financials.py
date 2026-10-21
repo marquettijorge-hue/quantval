@@ -191,3 +191,11 @@ def test_bank_banking_valuation_and_no_industrial_scores():
     assert "justified_pb" in result["valuation"]
     assert result["valuation"]["book_value_per_share"] > 0
 
+def test_exit_multiple_dcf_and_slider_sensitivity():
+    from fetch_financials import calculate_scenario_dcf
+    # Test that changing exit_multiple strictly changes fair value
+    fv_16 = calculate_scenario_dcf(100.0, 10.0, 0.0, 0.0, 0.10, 0.05, exit_multiple=16.0, eps=10.0)
+    fv_24 = calculate_scenario_dcf(100.0, 10.0, 0.0, 0.0, 0.10, 0.05, exit_multiple=24.0, eps=10.0)
+    assert fv_24 > fv_16
+    # 24x multiple must produce higher valuation than 16x multiple
+    assert fv_24 > fv_16 * 1.30

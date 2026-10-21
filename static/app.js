@@ -633,9 +633,9 @@ function renderExpectedCagr(cagr) {
 function initSensitivitySliders(d) {
   const v = d.valuation || {};
   const impliedG = d.reverse_dcf?.implied_growth_pct !== undefined ? d.reverse_dcf.implied_growth_pct : (d.reverse_dcf?.implied_fcf_growth_5y_pct || 14);
-  baseGrowth = Math.max(-10, Math.min(45, (v.growth ? v.growth * 100 : impliedG)));
-  baseWacc = Math.max(6, Math.min(16, (v.wacc ? v.wacc * 100 : 9.5)));
-  baseMultiple = d.archetype === "FINANCIALS_BANKING" ? 1.5 : (v.fair_pe_benchmark || 20.0);
+  baseGrowth = Math.max(-10, Math.min(45, (v.growth !== undefined ? v.growth * 100 : impliedG)));
+  baseWacc = Math.max(6, Math.min(16, (v.wacc !== undefined ? v.wacc * 100 : 9.5)));
+  baseMultiple = d.archetype === "FINANCIALS_BANKING" ? (v.justified_pb || 1.8) : (v.exit_multiple_base || v.fair_pe_benchmark || 20.0);
   baseFairValue = d.valuation_summary?.composite_fair_value || 100;
 
   const gSlider = document.getElementById("sliderGrowth");
@@ -658,15 +658,30 @@ function resetSensitivitySliders() {
   initSensitivitySliders(currentData);
 }
 
-// Exact 10-Year Discounted Cash Flow Formula with Year 1 Compounding
-function runDcfSimulation(startFcf, shares, cash, debt, wacc, g5y, gTerm) {
+// Exact 5-Year Institutional DCF Formula with Interim FCF and Exit Multiple
+function runDcfSimulation(startFcf, shares, cash, debt, wacc, g5y, exitMultiple, eps) {
   if (!startFcf || !shares || shares <= 0) return 0;
   wacc = Math.max(0.05, wacc);
-  gTerm = Math.min(wacc - 0.015, Math.max(0.01, gTerm));
+  
+  if (exitMultiple !== undefined && exitMultiple !== null && exitMultiple > 0) {
+    let pvFcf = 0;
+    let fcf = startFcf;
+    for (let yr = 1; yr <= 5; yr++) {
+      fcf *= (1.0 + g5y);
+      pvFcf += fcf / Math.pow(1.0 + wacc, yr);
+    }
+    const fcfPvShare = pvFcf / shares;
+    const baseEarnings = (eps && eps > 0) ? eps : (startFcf / shares);
+    const termEarnings = baseEarnings * Math.pow(1.0 + g5y, 5);
+    const termPrice = termEarnings * exitMultiple;
+    const pvTermShare = termPrice / Math.pow(1.0 + wacc, 5);
+    return Math.max(0.5, fcfPvShare + pvTermShare);
+  }
+
+  // Fallback to 10-year Gordon Growth if no exit multiple
   let pvFcf = 0;
   let fcf = startFcf;
-
-  // Correct horizon: Year 1 to 5 compounds fcf *= (1 + g)
+  const gTerm = 0.025;
   for (let yr = 1; yr <= 10; yr++) {
     if (yr <= 5) {
       fcf *= (1.0 + g5y);
@@ -675,15 +690,12 @@ function runDcfSimulation(startFcf, shares, cash, debt, wacc, g5y, gTerm) {
       const gFade = g5y * (1.0 - fade) + gTerm * fade;
       fcf *= (1.0 + gFade);
     }
-    const pv = fcf / Math.pow(1.0 + wacc, yr);
-    pvFcf += pv;
+    pvFcf += fcf / Math.pow(1.0 + wacc, yr);
   }
-
-  const fcf10 = fcf;
-  const terminalVal = (fcf10 * (1.0 + gTerm)) / (wacc - gTerm);
+  const terminalVal = (fcf * (1.0 + gTerm)) / Math.max(0.015, wacc - gTerm);
   const pvTerminal = terminalVal / Math.pow(1.0 + wacc, 10);
   const enterpriseVal = pvFcf + pvTerminal;
-  const equityVal = enterpriseVal + cash - debt;
+  const equityVal = enterpriseVal + (cash || 0) - (debt || 0);
   return Math.max(0.5, equityVal / shares);
 }
 
@@ -709,7 +721,7 @@ function recalculateSensitivity() {
   const v = currentData.valuation || {};
   let simFV = 0;
   if (v.fcf_base && v.shares) {
-    simFV = runDcfSimulation(v.fcf_base, v.shares, v.cash || 0, v.debt || 0, w / 100.0, g / 100.0, 0.025);
+    simFV = runDcfSimulation(v.fcf_base, v.shares, v.cash || 0, v.debt || 0, w / 100.0, g / 100.0, m, v.eps_base);
   } else {
     // Proportional approximation if FCF parameters missing
     const gFactor = Math.pow((1 + Math.max(-0.5, g / 100)) / (1 + Math.max(-0.5, baseGrowth / 100)), 2.2);

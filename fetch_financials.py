@@ -174,19 +174,42 @@ def ratio(numerator, denominator):
         return None
     return numerator / denominator
 
-def calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc, growth_5y, fade_to_g=0.025, g_terminal=0.025):
+def calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc, growth_5y, fade_to_g=0.025, g_terminal=0.025, exit_multiple=None, eps=None):
     """
-    Deterministic 10-year DCF:
-    - Years 1-5: Full 5-year compound growth at growth_5y (Year 1 is start_fcf * (1 + g)).
-    - Years 6-10: Linear convergence (fade) to fade_to_g / g_terminal.
-    - Terminal value: Gordon Growth formula FCF10 * (1 + g_term) / (WACC - g_term).
-    - Enterprise value: Sum of discounted FCFs + discounted terminal value.
-    - Equity value: Enterprise value + cash - debt.
-    - Fair value per share: Equity value / shares.
+    DCF Valuation Engine:
+    - If exit_multiple is provided (Institutional Exit Multiple Method):
+      * Years 1-5: Free Cash Flows compounded at growth_5y and discounted at wacc.
+      * Year 5 Terminal Equity: Terminal Earnings (EPS * (1 + g)^5) * exit_multiple, discounted at (1 + wacc)^5.
+      * Fair value per share: PV(Interim FCF / shares) + PV(Terminal Equity per share).
+    - If exit_multiple is None (Deterministic 10-year Gordon Growth):
+      * Years 1-5: Full 5-year compound growth at growth_5y (Year 1 is start_fcf * (1 + g)).
+      * Years 6-10: Linear convergence (fade) to fade_to_g / g_terminal.
+      * Terminal value: Gordon Growth formula FCF10 * (1 + g_term) / (WACC - g_term).
+      * Enterprise value: Sum of discounted FCFs + discounted terminal value.
+      * Equity value: Enterprise value + cash - debt.
+      * Fair value per share: Equity value / shares.
     """
     if shares is None or shares <= 0 or start_fcf is None or start_fcf <= 0:
         return 0.0
     wacc = max(0.05, float(wacc))
+
+    # Exit Multiple Specification
+    if exit_multiple is not None and exit_multiple > 0:
+        pv_fcf = 0.0
+        fcf = float(start_fcf)
+        for yr in range(1, 6):
+            fcf *= (1.0 + growth_5y)
+            pv_fcf += fcf / ((1.0 + wacc) ** yr)
+        fcf_pv_share = pv_fcf / float(shares)
+
+        base_earnings = float(eps) if (eps is not None and eps > 0) else (float(start_fcf) / float(shares))
+        term_earnings = base_earnings * ((1.0 + growth_5y) ** 5)
+        term_price = term_earnings * float(exit_multiple)
+        pv_term_share = term_price / ((1.0 + wacc) ** 5)
+
+        per_share = fcf_pv_share + pv_term_share
+        return round(float(max(0.5, per_share)), 2)
+
     g_terminal = min(wacc - 0.015, max(0.01, float(g_terminal)))
     pv_fcf = 0.0
     fcf = float(start_fcf)
@@ -206,69 +229,65 @@ def calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc, growth_5y, fade_
     per_share = max(0.0, equity / float(shares)) if shares > 0 else 0.0
     return round(float(per_share), 2)
 
-def solve_reverse_dcf(target_price, start_fcf, shares, cash, debt, wacc, g_terminal=0.025):
+def solve_reverse_dcf(target_price, start_fcf, shares, cash, debt, wacc, g_terminal=0.025, exit_multiple=None, eps=None):
     """
-    Solves for the implied 5-year FCF compound growth rate required to justify target_price.
-    Uses numerical bisection over [-0.50, +1.00] with the exact same 10-year specification.
+    Solves for the implied 5-year compound growth rate required to justify target_price.
+    Uses numerical bisection over [-0.50, +1.00] with the exact same valuation specification.
     """
     if target_price is None or target_price <= 0 or shares is None or shares <= 0 or start_fcf is None or start_fcf <= 0:
         return None
-    target_equity = float(target_price) * float(shares)
-    target_ev = max(1.0, target_equity - float(cash or 0.0) + float(debt or 0.0))
 
-    def eval_ev(g):
-        pv = 0.0
-        fcf = float(start_fcf)
-        for yr in range(1, 11):
-            if yr <= 5:
-                fcf *= (1.0 + g)
-            else:
-                fade = (yr - 5) / 5.0
-                growth = g * (1.0 - fade) + g_terminal * fade
-                fcf *= (1.0 + growth)
-            pv += fcf / ((1.0 + wacc) ** yr)
-        tv = (fcf * (1.0 + g_terminal)) / max(0.015, (wacc - g_terminal))
-        pv += tv / ((1.0 + wacc) ** 10)
-        return pv
+    def eval_val(g):
+        return calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc, g, fade_to_g=g_terminal, g_terminal=g_terminal, exit_multiple=exit_multiple, eps=eps)
 
     low = -0.50
     high = 1.00
-    if eval_ev(low) > target_ev or eval_ev(high) < target_ev:
+    val_low = eval_val(low)
+    val_high = eval_val(high)
+    if val_low > target_price or val_high < target_price:
         return None
     for _ in range(60):
         mid = (low + high) / 2.0
-        pv = eval_ev(mid)
-        if pv < target_ev:
+        val = eval_val(mid)
+        if val < target_price:
             low = mid
         else:
             high = mid
     return round(mid * 100.0, 1)
 
-def calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc, growth_5y, current_price, g_terminal=0.025):
+def calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc, growth_5y, current_price, g_terminal=0.025, exit_multiple=None, eps=None):
     """
     Projects the intrinsic value per share at Year 5 under scenario assumptions
     and calculates annualized price variation: CAGR = (P5 / P0) ** (1/5) - 1.
     """
-    if not current_price or current_price <= 0 or not shares or shares <= 0 or not start_fcf or start_fcf <= 0 or wacc <= g_terminal:
+    if not current_price or current_price <= 0 or not shares or shares <= 0 or not start_fcf or start_fcf <= 0:
         return None
-    fcf = float(start_fcf) * ((1.0 + growth_5y) ** 5)
-    pv_5 = 0.0
-    f = fcf
-    for yr in range(6, 11):
-        fade = (yr - 5) / 5.0
-        g = growth_5y * (1.0 - fade) + g_terminal * fade
-        f *= (1.0 + g)
-        pv_5 += f / ((1.0 + wacc) ** (yr - 5))
-    tv_5 = (f * (1.0 + g_terminal)) / max(0.015, (wacc - g_terminal))
-    pv_5 += tv_5 / ((1.0 + wacc) ** 5)
-    ev_5 = pv_5 + float(cash or 0.0) - float(debt or 0.0)
-    p_5 = max(0.0, ev_5 / float(shares))
+    
+    if exit_multiple is not None and exit_multiple > 0:
+        base_earnings = float(eps) if (eps is not None and eps > 0) else (float(start_fcf) / float(shares))
+        p_5 = base_earnings * ((1.0 + growth_5y) ** 5) * float(exit_multiple)
+    else:
+        if wacc <= g_terminal:
+            return None
+        fcf = float(start_fcf) * ((1.0 + growth_5y) ** 5)
+        pv_5 = 0.0
+        f = fcf
+        for yr in range(6, 11):
+            fade = (yr - 5) / 5.0
+            g = growth_5y * (1.0 - fade) + g_terminal * fade
+            f *= (1.0 + g)
+            pv_5 += f / ((1.0 + wacc) ** (yr - 5))
+        tv_5 = (f * (1.0 + g_terminal)) / max(0.015, (wacc - g_terminal))
+        pv_5 += tv_5 / ((1.0 + wacc) ** 5)
+        ev_5 = pv_5 + float(cash or 0.0) - float(debt or 0.0)
+        p_5 = max(0.0, ev_5 / float(shares))
+
     if p_5 <= 0:
         return -99.9
     cagr = ((p_5 / float(current_price)) ** (1.0 / 5.0) - 1.0) * 100.0
     return round(cagr, 1)
 
-def generate_sensitivity_matrix(start_fcf, shares, cash, debt, base_wacc, base_growth, g_terminal=0.025, current_price=None):
+def generate_sensitivity_matrix(start_fcf, shares, cash, debt, base_wacc, base_growth, g_terminal=0.025, current_price=None, exit_multiple=None, eps=None):
     """
     Generates a 5x5 sensitivity matrix of Growth vs WACC.
     """
@@ -278,8 +297,8 @@ def generate_sensitivity_matrix(start_fcf, shares, cash, debt, base_wacc, base_g
     for g in growth_steps:
         row = []
         for w in wacc_steps:
-            val = calculate_scenario_dcf(start_fcf, shares, cash, debt, w, g, fade_to_g=0.025, g_terminal=g_terminal)
-            mos = round((val - current_price) / val * 100.0, 1) if current_price and val > 0 else None
+            val = calculate_scenario_dcf(start_fcf, shares, cash, debt, w, g, fade_to_g=0.025, g_terminal=g_terminal, exit_multiple=exit_multiple, eps=eps)
+            mos = round((val - current_price) / val * 100.0, 1) if current_price and val > 0 and val >= current_price else 0.0
             delta = round((val - current_price) / current_price * 100.0, 1) if current_price and current_price > 0 else None
             is_base = (abs(g - base_growth) < 0.0001 and abs(w - base_wacc) < 0.0001)
             row.append({
@@ -293,7 +312,7 @@ def generate_sensitivity_matrix(start_fcf, shares, cash, debt, base_wacc, base_g
         matrix.append(row)
     return matrix
 
-def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, base_growth, current_price=None, weights=None):
+def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, base_growth, current_price=None, weights=None, exit_multiple=None, eps=None):
     """
     Calculates Bear, Base, Bull intrinsic values, expected fair value E[V], Margin of Safety, and 5Y CAGR.
     """
@@ -301,20 +320,28 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
     w_base = float(weights.get("base", 0.50)) if weights else 0.50
     w_bull = float(weights.get("bull", 0.25)) if weights else 0.25
 
+    base_m = float(exit_multiple) if (exit_multiple is not None and exit_multiple > 0) else None
+    if base_m:
+        m_bear = max(8.0, round(base_m * 0.80, 1))
+        m_base = round(base_m, 1)
+        m_bull = min(50.0, round(base_m * 1.20, 1))
+    else:
+        m_bear = m_base = m_bull = None
+
     # Bear scenario
-    g_bear = max(0.02, round(base_growth * 0.50, 4))
+    g_bear = max(0.015, round(base_growth * 0.60, 4))
     wacc_bear = round(base_wacc + 0.010, 4)
-    v_bear = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc_bear, g_bear, fade_to_g=0.020, g_terminal=0.020)
+    v_bear = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc_bear, g_bear, fade_to_g=0.020, g_terminal=0.020, exit_multiple=m_bear, eps=eps)
 
     # Base scenario
     g_base = round(base_growth, 4)
     wacc_base = round(base_wacc, 4)
-    v_base = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc_base, g_base, fade_to_g=0.025, g_terminal=0.025)
+    v_base = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc_base, g_base, fade_to_g=0.025, g_terminal=0.025, exit_multiple=m_base, eps=eps)
 
     # Bull scenario
-    g_bull = min(0.45, round(base_growth * 1.30, 4))
+    g_bull = min(0.40, round(base_growth * 1.30, 4))
     wacc_bull = max(0.070, round(base_wacc - 0.005, 4))
-    v_bull = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc_bull, g_bull, fade_to_g=0.030, g_terminal=0.030)
+    v_bull = calculate_scenario_dcf(start_fcf, shares, cash, debt, wacc_bull, g_bull, fade_to_g=0.030, g_terminal=0.030, exit_multiple=m_bull, eps=eps)
 
     ev_weighted = round((w_bear * v_bear) + (w_base * v_base) + (w_bull * v_bull), 2)
     
@@ -331,26 +358,29 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
         delta_vs_price = None
 
     # Reverse DCF implied growth
-    rev_g = solve_reverse_dcf(current_price, start_fcf, shares, cash, debt, wacc_base) if current_price else None
+    rev_g = solve_reverse_dcf(current_price, start_fcf, shares, cash, debt, wacc_base, exit_multiple=m_base, eps=eps) if current_price else None
     
     if current_price and rev_g is not None:
-        rev_text = f"Con estos supuestos (WACC {wacc_base*100:.1f}%, Terminal 2.5%), el precio actual de USD {current_price:.2f} exige que la empresa incremente su FCF al {rev_g:.1f}% anual compuesto durante los próximos 5 años."
+        if m_base:
+            rev_text = f"Con estos supuestos (WACC {wacc_base*100:.1f}%, Múltiplo Exit {m_base:.1f}x), el precio actual de USD {current_price:.2f} exige que la empresa incremente sus beneficios/FCF al {rev_g:.1f}% anual compuesto durante los próximos 5 años."
+        else:
+            rev_text = f"Con estos supuestos (WACC {wacc_base*100:.1f}%, Terminal 2.5%), el precio actual de USD {current_price:.2f} exige que la empresa incremente su FCF al {rev_g:.1f}% anual compuesto durante los próximos 5 años."
     elif current_price:
         rev_text = "No se encontró una tasa de crecimiento en el intervalo analizado (-50% a +100%) que iguale la cotización actual con estos supuestos."
     else:
         rev_text = "Requiere cotización de mercado para resolver la expectativa implícita."
 
     # 5-Year CAGR Price Variation
-    cagr_base = calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc_base, g_base, current_price, 0.025)
-    cagr_bear = calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc_bear, g_bear, current_price, 0.020)
-    cagr_bull = calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc_bull, g_bull, current_price, 0.030)
+    cagr_base = calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc_base, g_base, current_price, 0.025, exit_multiple=m_base, eps=eps)
+    cagr_bear = calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc_bear, g_bear, current_price, 0.020, exit_multiple=m_bear, eps=eps)
+    cagr_bull = calculate_5y_projected_cagr(start_fcf, shares, cash, debt, wacc_bull, g_bull, current_price, 0.030, exit_multiple=m_bull, eps=eps)
     cagr_exp = round((w_bear * cagr_bear + w_base * cagr_base + w_bull * cagr_bull), 1) if (cagr_bear is not None and cagr_base is not None and cagr_bull is not None) else None
 
-    matrix = generate_sensitivity_matrix(start_fcf, shares, cash, debt, wacc_base, g_base, current_price=current_price)
+    matrix = generate_sensitivity_matrix(start_fcf, shares, cash, debt, wacc_base, g_base, current_price=current_price, exit_multiple=m_base, eps=eps)
 
     return {
         "status": "available",
-        "model_type": "10y_fcf_dcf",
+        "model_type": "5y_exit_multiple_dcf" if m_base else "10y_fcf_dcf",
         "composite_fair_value": ev_weighted,
         "margin_of_safety_pct": mos,
         "delta_vs_price_pct": delta_vs_price,
@@ -362,6 +392,9 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
         "wacc": wacc_base,
         "growth": g_base,
         "terminal_growth": 0.025,
+        "exit_multiple_base": m_base,
+        "fair_pe_benchmark": m_base,
+        "eps_base": eps,
         "current_price": current_price,
         "weights": {"bear": w_bear, "base": w_base, "bull": w_bull},
         "reverse_dcf": {
@@ -370,6 +403,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
             "text": rev_text,
             "wacc_assumed_pct": round(wacc_base * 100.0, 2),
             "terminal_g_pct": 2.5,
+            "exit_multiple_assumed": m_base,
             "years": 5
         },
         "expected_5y_cagr": {
@@ -390,6 +424,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
                 "growth_assumed_pct": round(g_bear * 100.0, 1),
                 "wacc_assumed_pct": round(wacc_bear * 100.0, 2),
                 "terminal_g_pct": 2.0,
+                "exit_multiple": m_bear,
                 "cagr_5y_pct": cagr_bear,
                 "label": "Pesimista (Bear)",
                 "hypothesis": "Desaceleración en la demanda, compresión de márgenes operativos y WACC castigado (+100 bps)."
@@ -400,6 +435,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
                 "growth_assumed_pct": round(g_base * 100.0, 1),
                 "wacc_assumed_pct": round(wacc_base * 100.0, 2),
                 "terminal_g_pct": 2.5,
+                "exit_multiple": m_base,
                 "cagr_5y_pct": cagr_base,
                 "label": "Base del modelo",
                 "hypothesis": "Desempeño normalizado acorde a la trayectoria histórica y márgenes sostenibles del modelo."
@@ -410,6 +446,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
                 "growth_assumed_pct": round(g_bull * 100.0, 1),
                 "wacc_assumed_pct": round(wacc_bull * 100.0, 2),
                 "terminal_g_pct": 3.0,
+                "exit_multiple": m_bull,
                 "cagr_5y_pct": cagr_bull,
                 "label": "Optimista (Bull)",
                 "hypothesis": "Aceleración secular, expansión de márgenes por escala y menor coste de capital (-50 bps)."
@@ -417,7 +454,7 @@ def calculate_probabilistic_scenarios(start_fcf, shares, cash, debt, base_wacc, 
             "expected_weighted_fair_value": ev_weighted
         },
         "sensitivity_matrix": matrix,
-        "methodology": "DCF 10 años con convergencia lineal hacia tasa terminal y valor residual por modelo de Gordon-Shapiro."
+        "methodology": f"DCF institucional a 5 años con flujos de caja descontados y valor terminal por múltiplo de salida (Exit P/E {m_base:.1f}x)." if m_base else "DCF 10 años con convergencia lineal hacia tasa terminal y valor residual por modelo de Gordon-Shapiro."
     }
 
 def build_banking_valuation(equity, prior_equity, net_income, shares, current_price=None):
@@ -765,7 +802,7 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
             beta = b
             break
     # Ke = 4.25% + beta * 5.0%
-    base_wacc = round(min(0.14, max(0.08, 0.0425 + beta * 0.050)), 4)
+    base_wacc = round(min(0.125, max(0.075, 0.0425 + beta * 0.050)), 4)
     # Calibrate Base 5y Growth from historical growth
     hist_g = growth if growth is not None else 0.08
     base_growth = round(min(0.35, max(0.04, hist_g * 0.70 if hist_g > 0.20 else hist_g)), 4)
@@ -779,6 +816,29 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
         if fcf > t_ebit * 1.35:
             effective_fcf = round(t_ebit * 0.85, 2)
 
+    # Determine base exit multiple and EPS for institutional valuation
+    pe_trail = consensus.get("pe_trailing") if isinstance(consensus, dict) else None
+    fwd_pe = consensus.get("forward_pe") if isinstance(consensus, dict) else None
+    
+    # Benchmark exit multiple: bounded in reasonable institutional ranges
+    if pe_trail and pe_trail > 0:
+        base_exit_pe = round(min(35.0, max(14.0, float(pe_trail))), 1)
+    elif fwd_pe and fwd_pe > 0:
+        base_exit_pe = round(min(35.0, max(14.0, float(fwd_pe) * 1.15)), 1)
+    else:
+        base_exit_pe = 20.0
+    
+    # EPS calculation:
+    t_ni = values.get("net_income")
+    if t_ni and shares_val and shares_val > 0 and t_ni > 0:
+        eps_val = round(float(t_ni) / float(shares_val), 2)
+    elif current_price and pe_trail and pe_trail > 0:
+        eps_val = round(float(current_price) / float(pe_trail), 2)
+    elif shares_val and shares_val > 0 and effective_fcf and effective_fcf > 0:
+        eps_val = round(float(effective_fcf) / float(shares_val), 2)
+    else:
+        eps_val = None
+
     # Build Valuation Model
     if financial_sector:
         valuation = build_banking_valuation(values.get("equity"), prior_equity["val"] if prior_equity else None, values.get("net_income"), shares_val or 1.0, current_price=current_price)
@@ -790,7 +850,9 @@ def build_financials(symbol, cik, facts, submissions, *, today=None, quote=None,
             debt=debt_val,
             base_wacc=base_wacc,
             base_growth=base_growth,
-            current_price=current_price
+            current_price=current_price,
+            exit_multiple=base_exit_pe,
+            eps=eps_val
         )
     else:
         valuation = {
